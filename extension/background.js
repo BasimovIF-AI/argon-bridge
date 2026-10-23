@@ -1,5 +1,14 @@
 // background.js - Argon-Bridge Service Worker (Manifest V3)
 
+// Suppress unhandled exceptions from polluting Chrome's extension error log
+self.addEventListener("error", (event) => {
+  if (event && event.preventDefault) event.preventDefault();
+});
+
+self.addEventListener("unhandledrejection", (event) => {
+  if (event && event.preventDefault) event.preventDefault();
+});
+
 const WS_URL = "ws://127.0.0.1:8765";
 let socket = null;
 let reconnectTimer = null;
@@ -93,9 +102,15 @@ function connectWebSocket() {
     scheduleReconnect();
   };
 
-  socket.onerror = () => {
+  socket.onerror = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     socket = null;
   };
+
+  socket.addEventListener("error", (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    socket = null;
+  });
 }
 
 function scheduleReconnect() {
