@@ -24,7 +24,6 @@ chrome.runtime.onConnect.addListener((port) => {
       dedicatedBridgeTabId = tabId;
     }
 
-    // Connect WebSocket if not connected
     reconnectDelay = 2000;
     connectWebSocket();
 
@@ -66,6 +65,9 @@ function connectWebSocket() {
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
     broadcastStatus();
+
+    // Automatically ensure dedicated Gemini tab is open
+    ensureGeminiTab();
   };
 
   socket.onmessage = async (event) => {
@@ -131,8 +133,32 @@ function waitForTabPort(tabId, timeoutMs = 15000) {
   });
 }
 
+// Automatically ensure a dedicated Gemini tab is always open
+async function ensureGeminiTab() {
+  const tabs = await chrome.tabs.query({ url: "*://gemini.google.com/*" });
+  if (tabs.length === 0) {
+    console.log("[Gemini-Bridge] Automatically opening dedicated tab on gemini.google.com...");
+    const tab = await chrome.tabs.create({
+      url: "https://gemini.google.com/app",
+      active: true
+    });
+    dedicatedBridgeTabId = tab.id;
+    return tab;
+  } else {
+    dedicatedBridgeTabId = tabs[0].id;
+    return tabs[0];
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  ensureGeminiTab();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureGeminiTab();
+});
+
 async function getDedicatedTab(targetUrl) {
-  // If we already have a dedicated tab, verify it's still alive
   if (dedicatedBridgeTabId !== null) {
     try {
       const tab = await chrome.tabs.get(dedicatedBridgeTabId);
@@ -144,29 +170,19 @@ async function getDedicatedTab(targetUrl) {
     }
   }
 
-  // Look for currently active tab on gemini.google.com
   const activeTabs = await chrome.tabs.query({ url: "*://gemini.google.com/*", active: true });
   if (activeTabs.length > 0) {
     dedicatedBridgeTabId = activeTabs[0].id;
     return activeTabs[0];
   }
 
-  // Look for any existing gemini.google.com tab
   const allTabs = await chrome.tabs.query({ url: "*://gemini.google.com/*" });
   if (allTabs.length > 0) {
     dedicatedBridgeTabId = allTabs[0].id;
     return allTabs[0];
   }
 
-  // If no tab exists, create a dedicated new tab!
-  console.log("[Gemini-Bridge] Creating brand new dedicated tab for Gemini...");
-  const newTab = await chrome.tabs.create({
-    url: targetUrl || "https://gemini.google.com/app",
-    active: true
-  });
-  dedicatedBridgeTabId = newTab.id;
-  await waitForTabPort(newTab.id);
-  return newTab;
+  return await ensureGeminiTab();
 }
 
 async function executePromptOnGemini(req) {
@@ -205,7 +221,6 @@ async function executePromptOnGemini(req) {
   }
 
   if (!port) {
-    // If still no port, try any available Gemini port
     for (const [tId, p] of geminiPorts.entries()) {
       port = p;
       dedicatedBridgeTabId = tId;

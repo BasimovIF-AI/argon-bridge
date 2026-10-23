@@ -17,6 +17,11 @@
 
   // 1. Maintain long-lived port connection to background service worker
   function connectPort() {
+    // If extension was reloaded in chrome://extensions, stop execution cleanly
+    if (!chrome.runtime || !chrome.runtime.id) {
+      return;
+    }
+
     try {
       port = chrome.runtime.connect({ name: "gemini_tab" });
 
@@ -28,15 +33,19 @@
       });
 
       port.onDisconnect.addListener(() => {
-        console.log("[Gemini-Bridge] Port to service worker disconnected. Reconnecting in 2s...");
         port = null;
-        setTimeout(connectPort, 2000);
+        if (chrome.runtime && chrome.runtime.id) {
+          setTimeout(connectPort, 2000);
+        }
       });
 
       sendStatusSync();
     } catch (e) {
-      console.warn("[Gemini-Bridge] Connection failed, retrying in 2s:", e);
-      setTimeout(connectPort, 2000);
+      if (e && e.message && e.message.includes("Extension context invalidated")) {
+        // Page was loaded under an older extension version; cleanly stop retry loop
+        return;
+      }
+      setTimeout(connectPort, 3000);
     }
   }
 
@@ -485,6 +494,7 @@
   connectPort();
 
   setInterval(() => {
+    if (!chrome.runtime || !chrome.runtime.id) return;
     if (!port) connectPort();
     else sendStatusSync();
   }, 10000);
