@@ -455,7 +455,7 @@
   // 5. Complete prompt execution lifecycle
   async function handleExecutePrompt(req) {
     if (isExecuting) {
-      console.warn("[Gemini-Bridge] Overriding previous request for new request:", req.id);
+      console.log("[Gemini-Bridge] Overriding previous request for new request:", req.id);
     }
     isExecuting = true;
     console.log(`[Gemini-Bridge] Starting execution for request ${req.id}...`);
@@ -587,7 +587,7 @@
       });
 
     } catch (err) {
-      console.error("[Gemini-Bridge] Execution error:", err);
+      console.log("[Gemini-Bridge] Prompt rejected / execution stopped:", err.message || err);
       port.postMessage({
         action: "PROMPT_FINISHED",
         id: req.id,
