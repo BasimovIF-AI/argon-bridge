@@ -67,5 +67,22 @@ cargo run -- ask --prompt "Write a quicksort in Rust"
 - Subsequent prompts for that same `conversation_id` instruct the extension to navigate/stay in that chat session.
 
 ### DOM & Extension Safeguards
-- Injects input using synthetic `InputEvent` dispatching to ensure Google's Angular/React/Wiz state handles the text.
-- Observes response completion via `MutationObserver` on model response nodes and detects when the streaming indicator / stop button transitions to finished state.
+- Injects input using synthetic `InputEvent` and `document.execCommand` dispatching to ensure Google's Angular/React/Wiz state properly captures input.
+- Observes response completion by tracking the disappearance of the Stop Generating indicator AND the presence of the bottom action bar (Copy button), eliminating false completion triggers during the **Thinking / Reasoning** phase.
+- Extracts clean markdown by programmatically triggering the native "Copy response" action on Gemini and reading pristine raw Markdown directly from the clipboard, with automatic fallback to DOM parsing.
+- Prevents background tab throttling in Chrome by waking up and activating the Gemini tab via `chrome.tabs.update` upon receiving prompt requests.
+
+---
+
+## 4. Operational Pattern: Architect (Argon) + Builder (Antigravity Agent)
+
+When solving coding tasks in this repository:
+1. **Antigravity Agent acts as the Builder (Hands):**
+   - Reads files, analyzes project structure, runs linters, compiles targets, and applies code diffs.
+2. **Gemini 4 Argon acts as the Chief Architect (Brain):**
+   - Automatically consulted via `ask_gemini_argon` for:
+     - High-level system architecture and module boundaries.
+     - Tricky algorithms, concurrent data structures, or safety-critical logic.
+     - Complex refactorings and thorough multi-file code reviews.
+3. **Execution Flow:**
+   - Builder gathers the relevant files/error logs -> sends them as `context` to `ask_gemini_argon` -> receives pristine architecture/code -> Builder breaks it down and writes it to workspace files, then runs `cargo test` / `build.ps1` to verify.

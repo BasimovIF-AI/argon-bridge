@@ -86,7 +86,7 @@ impl McpServer {
                     "tools": [
                         {
                             "name": "ask_gemini_argon",
-                            "description": "Send a prompt, coding challenge, or file context to Google Gemini (specifically Gemini 4 Argon). Automatically maintains 1:1 conversation context with Antigravity.",
+                            "description": "Consult Google Gemini 4 Argon for high-level architectural design, complex algorithms, system refactoring, concurrency, or in-depth code reviews. You (Antigravity Agent) act as the Builder executing tool calls and managing files; Gemini 4 Argon acts as the Chief Architect producing optimal solutions. Maintains 1:1 conversation context automatically.",
                             "inputSchema": {
                                 "type": "object",
                                 "properties": {

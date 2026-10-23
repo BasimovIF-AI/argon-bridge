@@ -5,7 +5,10 @@
   "description": "Ultra-fast bridge connecting Antigravity AI Agent with Google Gemini 4 Argon",
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "clipboardRead",
+    "clipboardWrite",
+    "alarms"
   ],
   "host_permissions": [
     "*://gemini.google.com/*",

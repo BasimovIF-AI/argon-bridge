@@ -100,22 +100,35 @@ async function handleBridgeMessage(msg) {
   }
 }
 
-async function executePromptOnGemini(req) {
-  if (!activeGeminiPort) {
-    const tabs = await chrome.tabs.query({ url: "*://gemini.google.com/*" });
-    if (tabs.length === 0) {
-      const targetUrl = req.chat_url || "https://gemini.google.com/app";
-      await chrome.tabs.create({ url: targetUrl, active: true });
-      sendToBridge({
-        type: "PROMPT_RESPONSE",
-        id: req.id,
-        status: "ERROR",
-        content: "",
-        chat_url: null,
-        error: "Gemini tab was not open. A new tab has been created, please wait for page to load and retry."
-      });
-      return;
+// Keep service worker alive using chrome.alarms
+chrome.alarms.create("bridgeKeepAlive", { periodInMinutes: 0.5 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "bridgeKeepAlive") {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      connectWebSocket();
     }
+  }
+});
+
+async function executePromptOnGemini(req) {
+  // Wake up and prevent throttling by ensuring the Gemini tab is active
+  const tabs = await chrome.tabs.query({ url: "*://gemini.google.com/*" });
+  if (tabs.length > 0) {
+    try {
+      await chrome.tabs.update(tabs[0].id, { active: true });
+    } catch (_) {}
+  } else {
+    const targetUrl = req.chat_url || "https://gemini.google.com/app";
+    await chrome.tabs.create({ url: targetUrl, active: true });
+    sendToBridge({
+      type: "PROMPT_RESPONSE",
+      id: req.id,
+      status: "ERROR",
+      content: "",
+      chat_url: null,
+      error: "Gemini tab was not open. A new tab has been created, please wait for page to load and retry."
+    });
+    return;
   }
 
   if (!activeGeminiPort) {

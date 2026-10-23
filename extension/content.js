@@ -223,6 +223,27 @@
     return null;
   }
 
+  function findResponseCopyButton(container) {
+    if (!container) return null;
+    const parentTurn = container.closest('message-content, model-response, .conversation-turn') || container.parentElement;
+    const scope = parentTurn || container;
+    const selectors = [
+      'button[aria-label*="Copy" i]',
+      'button[aria-label*="Копировать" i]',
+      '[data-test-id*="copy" i]',
+      '.copy-button',
+      'button[mattooltip*="Copy" i]',
+      'button[mattooltip*="Копировать" i]'
+    ];
+    for (const sel of selectors) {
+      const btn = scope.querySelector(sel);
+      if (btn && btn.offsetParent !== null) {
+        return btn;
+      }
+    }
+    return null;
+  }
+
   function htmlToMarkdown(node) {
     if (!node) return "";
     let result = "";
@@ -231,6 +252,16 @@
       if (child.nodeType === Node.TEXT_NODE) {
         result += child.textContent;
       } else if (child.nodeType === Node.ELEMENT_NODE) {
+        // Skip thinking / reasoning collapse blocks in final code extraction
+        if (
+          child.classList &&
+          (child.classList.contains('thought-container') ||
+           child.classList.contains('model-thought') ||
+           child.tagName.toLowerCase() === 'model-thought')
+        ) {
+          continue;
+        }
+
         const tag = child.tagName.toLowerCase();
 
         if (tag === 'pre') {
@@ -320,7 +351,7 @@
         sendBtn.click();
       }
 
-      // Step G: Wait for response to start and complete
+      // Step G: Wait for response to start and complete (taking Thinking into account)
       console.log("[Gemini-Bridge] Waiting for Gemini 4 Argon to generate response...");
       await sleep(1500);
 
@@ -330,7 +361,7 @@
       let stableCount = 0;
 
       while (Date.now() - startTime < maxWaitMs) {
-        await sleep(1000);
+        await sleep(800);
 
         const stopBtn = findStopButton();
         const currentResponseEl = getLatestResponseElement();
@@ -338,11 +369,19 @@
 
         if (currentCount > initialCount && currentResponseEl) {
           const currentText = currentResponseEl.innerText || "";
-          
-          if (currentText.length > 0 && currentText.length === lastTextLength && !stopBtn) {
+          const copyBtn = findResponseCopyButton(currentResponseEl);
+
+          // Complete condition: Stop button is gone AND copy button appeared
+          if (!stopBtn && copyBtn && currentText.length > 0) {
+            console.log("[Gemini-Bridge] Generation complete (Stop button absent & Copy action button visible)! Length:", currentText.length);
+            break;
+          }
+
+          // Fallback: If copy button selector changed, verify stillness for ~3.2 seconds
+          if (!stopBtn && currentText.length > 0 && currentText.length === lastTextLength) {
             stableCount++;
-            if (stableCount >= 2) { // Response has been unchanged for 2 seconds and stop button is gone
-              console.log("[Gemini-Bridge] Generation complete! Output length:", currentText.length);
+            if (stableCount >= 4) {
+              console.log("[Gemini-Bridge] Generation complete via stillness fallback. Length:", currentText.length);
               break;
             }
           } else {
@@ -352,15 +391,35 @@
         }
       }
 
-      // Step H: Extract final formatted markdown
+      // Step H: Extract pristine Markdown (prioritize native Copy button over DOM scraping)
       const finalResponseEl = getLatestResponseElement();
       if (!finalResponseEl) {
         throw new Error("No response element appeared after prompt submission.");
       }
 
-      let markdown = htmlToMarkdown(finalResponseEl).trim();
+      let markdown = "";
+      const copyBtn = findResponseCopyButton(finalResponseEl);
+      if (copyBtn) {
+        try {
+          console.log("[Gemini-Bridge] Clicking native Copy button for pristine source Markdown...");
+          copyBtn.click();
+          await sleep(250);
+          const clipboardText = await navigator.clipboard.readText();
+          if (clipboardText && clipboardText.trim().length > 0) {
+            markdown = clipboardText.trim();
+            console.log("[Gemini-Bridge] Successfully extracted pristine Markdown from clipboard! Bytes:", markdown.length);
+          }
+        } catch (clipErr) {
+          console.warn("[Gemini-Bridge] Clipboard read unavailable, falling back to DOM parsing:", clipErr);
+        }
+      }
+
+      // Fallback: parse DOM directly if clipboard read was empty or blocked
       if (!markdown || markdown.length === 0) {
-        markdown = (finalResponseEl.innerText || finalResponseEl.textContent || "").trim();
+        markdown = htmlToMarkdown(finalResponseEl).trim();
+        if (!markdown || markdown.length === 0) {
+          markdown = (finalResponseEl.innerText || finalResponseEl.textContent || "").trim();
+        }
       }
 
       const finalUrl = window.location.href;
