@@ -330,19 +330,20 @@
     console.log(`[Gemini-Bridge] Starting execution for request ${req.id}...`);
 
     try {
-      // Step A: Handle navigation / chat session
-      await handleNavigation(req.chat_url);
+      // Step A: Ensure model selector is on Argon if requested (soft check)
+      try {
+        await ensureModelSelected(req.model);
+      } catch (modelErr) {
+        console.warn("[Gemini-Bridge] Model switcher notice:", modelErr);
+      }
 
-      // Step B: Ensure model selector is on Argon if requested
-      await ensureModelSelected(req.model);
-
-      // Step C: Locate input field
+      // Step B: Locate input field
       const inputEl = await waitForCondition(() => findInputField(), 10000, 300);
       if (!inputEl) {
         throw new Error("Could not find Gemini chat input field.");
       }
 
-      // Step D: Count existing responses before sending
+      // Step C: Count existing responses before sending
       const initialResponses = document.querySelectorAll('model-response, message-content, .model-response-text');
       const initialCount = initialResponses.length;
 

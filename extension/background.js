@@ -110,25 +110,47 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
+function waitForTabAndPort(tabId, timeoutMs = 15000) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const interval = setInterval(() => {
+      if (activeGeminiPort || Date.now() - start > timeoutMs) {
+        clearInterval(interval);
+        resolve(activeGeminiPort);
+      }
+    }, 200);
+  });
+}
+
 async function executePromptOnGemini(req) {
-  // Wake up and prevent throttling by ensuring the Gemini tab is active
+  // 1. Find or open Gemini tab
   const tabs = await chrome.tabs.query({ url: "*://gemini.google.com/*" });
-  if (tabs.length > 0) {
-    try {
-      await chrome.tabs.update(tabs[0].id, { active: true });
-    } catch (_) {}
-  } else {
+  let tab = tabs[0];
+
+  if (!tab) {
     const targetUrl = req.chat_url || "https://gemini.google.com/app";
-    await chrome.tabs.create({ url: targetUrl, active: true });
-    sendToBridge({
-      type: "PROMPT_RESPONSE",
-      id: req.id,
-      status: "ERROR",
-      content: "",
-      chat_url: null,
-      error: "Gemini tab was not open. A new tab has been created, please wait for page to load and retry."
-    });
-    return;
+    tab = await chrome.tabs.create({ url: targetUrl, active: true });
+    await waitForTabAndPort(tab.id);
+  } else {
+    try {
+      await chrome.tabs.update(tab.id, { active: true });
+    } catch (_) {}
+  }
+
+  // 2. Safely navigate tab if chat URL does not match
+  if (tab) {
+    const currentUrl = tab.url || "";
+    if (req.chat_url && currentUrl !== req.chat_url) {
+      console.log(`[Gemini-Bridge] Navigating to mapped chat: ${req.chat_url}`);
+      activeGeminiPort = null;
+      await chrome.tabs.update(tab.id, { url: req.chat_url });
+      await waitForTabAndPort(tab.id);
+    } else if (!req.chat_url && currentUrl.includes("/app/") && !currentUrl.endsWith("/app")) {
+      console.log(`[Gemini-Bridge] Navigating to clean /app for new conversation...`);
+      activeGeminiPort = null;
+      await chrome.tabs.update(tab.id, { url: "https://gemini.google.com/app" });
+      await waitForTabAndPort(tab.id);
+    }
   }
 
   if (!activeGeminiPort) {
@@ -138,7 +160,7 @@ async function executePromptOnGemini(req) {
       status: "ERROR",
       content: "",
       chat_url: null,
-      error: "Gemini tab is open but content script is not yet connected. Please refresh the gemini.google.com tab."
+      error: "Gemini tab content script is not connected. Please ensure gemini.google.com is open."
     });
     return;
   }
@@ -148,8 +170,7 @@ async function executePromptOnGemini(req) {
     id: req.id,
     prompt: req.prompt,
     model: req.model || "Gemini 4 Argon",
-    chat_url: req.chat_url,
-    timeout_secs: req.timeout_secs || 180
+    timeout_secs: req.timeout_secs || 240
   });
 }
 
