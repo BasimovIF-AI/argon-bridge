@@ -52,7 +52,6 @@
 
   // 2. Model Detection and Selection
   function detectCurrentModel() {
-    // Look for model selector buttons or labels in the header
     const candidates = document.querySelectorAll(
       'button[aria-label*="model" i], button[aria-label*="модел" i], .model-title, [data-test-id*="model" i]'
     );
@@ -66,83 +65,70 @@
   }
 
   async function ensureModelSelected(targetModel) {
-    if (!targetModel) return;
-    const lowerTarget = targetModel.toLowerCase();
+    const lowerTarget = (targetModel || "argon").toLowerCase();
 
-    // Check if current text already mentions Argon / target
-    const currentText = document.body.innerText.toLowerCase();
-    const modelDropdowns = document.querySelectorAll(
-      'button[aria-label*="model" i], button[aria-label*="модел" i], [aria-haspopup="menu"], [data-test-id*="model" i]'
-    );
+    // Check all buttons on the page
+    const allButtons = Array.from(document.querySelectorAll('button, div[role="button"], [role="combobox"]'));
 
-    for (const btn of modelDropdowns) {
-      const btnText = (btn.innerText || btn.getAttribute('aria-label') || '').toLowerCase();
-      if (btnText.includes('argon')) {
+    // Check if Argon is already active
+    for (const btn of allButtons) {
+      const text = (btn.innerText || btn.textContent || "").toLowerCase();
+      if (text.includes("argon")) {
         console.log("[Gemini-Bridge] Model 'Argon' is already active.");
         return;
       }
     }
 
-    // Try to click dropdown to switch model if available
-    for (const btn of modelDropdowns) {
-      if (btn.offsetParent !== null) { // visible
-        console.log("[Gemini-Bridge] Attempting to open model selector dropdown...");
-        btn.click();
-        await sleep(500);
+    // Look for the model switcher button (often next to prompt area, showing Flash, Flash-Lite, Pro, etc.)
+    let switcherBtn = null;
+    for (const btn of allButtons) {
+      const text = (btn.innerText || btn.textContent || "").toLowerCase().trim();
+      const aria = (btn.getAttribute("aria-label") || "").toLowerCase();
 
-        // Find menu items
-        const menuItems = document.querySelectorAll(
-          '[role="menuitem"], [role="option"], mat-option, .mat-mdc-menu-item, div[role="menu"] button'
-        );
-        for (const item of menuItems) {
-          const itemText = (item.innerText || item.textContent || '').toLowerCase();
-          if (itemText.includes('argon') || (lowerTarget && itemText.includes(lowerTarget))) {
-            console.log("[Gemini-Bridge] Found model option:", item.innerText);
-            item.click();
-            await sleep(500);
-            return;
-          }
+      if (
+        text.includes("flash-lite") ||
+        text.includes("flash") ||
+        text.includes("pro") ||
+        text.includes("argon") ||
+        aria.includes("model") ||
+        aria.includes("модел")
+      ) {
+        if (btn.offsetParent !== null) {
+          switcherBtn = btn;
+          break;
         }
-
-        // Close dropdown if target wasn't found by clicking outside or pressing Escape
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        await sleep(200);
-        break;
       }
     }
-  }
 
-  // 3. Navigation helpers
-  async function handleNavigation(targetUrl) {
-    if (!targetUrl) {
-      // Force new chat: check if we have a "New chat" button
-      const newChatBtns = document.querySelectorAll(
-        'button[aria-label*="New chat" i], button[aria-label*="Новый чат" i], a[href="/app"], [data-test-id*="new-chat" i]'
+    if (switcherBtn) {
+      console.log("[Gemini-Bridge] Found model picker button:", switcherBtn.innerText);
+      switcherBtn.click();
+      await sleep(600);
+
+      // Search menu options for Argon
+      const menuOptions = Array.from(
+        document.querySelectorAll(
+          '[role="menuitem"], [role="option"], mat-option, .mat-mdc-menu-item, button, div[role="button"]'
+        )
       );
-      for (const btn of newChatBtns) {
-        if (btn.offsetParent !== null) {
-          console.log("[Gemini-Bridge] Clicking 'New chat' button...");
-          btn.click();
-          await sleep(1500);
+
+      for (const opt of menuOptions) {
+        const optText = (opt.innerText || opt.textContent || "").toLowerCase();
+        if (optText.includes("argon")) {
+          console.log("[Gemini-Bridge] Selecting Argon model from dropdown:", optText);
+          opt.click();
+          await sleep(600);
           return;
         }
       }
-      if (window.location.pathname !== "/app") {
-        console.log("[Gemini-Bridge] Navigating to /app for new chat...");
-        window.location.href = "https://gemini.google.com/app";
-        await sleep(2000);
-      }
-    } else {
-      // Existing chat requested: if different from current URL, navigate
-      if (window.location.href !== targetUrl) {
-        console.log(`[Gemini-Bridge] Navigating to mapped chat URL: ${targetUrl}`);
-        window.location.href = targetUrl;
-        await sleep(2500);
-      }
+
+      // Close dropdown if not found
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await sleep(200);
     }
   }
 
-  // 4. Input Injection & Sending
+  // 3. Input Injection & Sending
   function findInputField() {
     const selectors = [
       'div[contenteditable="true"][role="textbox"]',
@@ -171,7 +157,7 @@
     ];
     for (const sel of selectors) {
       const el = document.querySelector(sel);
-      if (el && el.offsetParent !== null && !el.disabled && el.getAttribute('aria-disabled') !== 'true') {
+      if (el && el.offsetParent !== null && !el.disabled && el.getAttribute("aria-disabled") !== "true") {
         return el;
       }
     }
@@ -181,7 +167,9 @@
   function findStopButton() {
     const selectors = [
       'button[aria-label*="Stop generating" i]',
-      'button[aria-label*="Stop" i]',
+      'button[aria-label*="Stop response" i]',
+      'button[aria-label*="Остановить ответ" i]',
+      'button[aria-label*="Остановить создание" i]',
       'button[aria-label*="Остановить" i]',
       '[data-test-id="stop-button"]'
     ];
@@ -199,29 +187,30 @@
     await sleep(100);
 
     // Select existing text and clear
-    document.execCommand('selectAll', false, null);
-    document.execCommand('delete', false, null);
+    document.execCommand("selectAll", false, null);
+    document.execCommand("delete", false, null);
 
     // Insert text via native execCommand so framework event listeners receive it
-    const success = document.execCommand('insertText', false, text);
+    const success = document.execCommand("insertText", false, text);
     if (!success || (inputEl.innerText || inputEl.textContent).trim().length === 0) {
-      console.log("[Gemini-Bridge] execCommand failed, falling back to innerText assignment...");
+      console.log("[Gemini-Bridge] execCommand fallback to innerText...");
       inputEl.innerText = text;
-      inputEl.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: text }));
-      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+      inputEl.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: text }));
+      inputEl.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
     await sleep(300);
   }
 
-  // 5. Response Extraction and Markdown formatting
+  // 4. Response Extraction and Markdown formatting
   function getLatestResponseElement() {
     const selectors = [
-      'model-response',
-      '.model-response-text',
-      'message-content',
-      '[data-test-id="model-response"]',
-      '.response-container-content'
+      "model-response",
+      "message-content",
+      ".model-response-text",
+      ".response-container-content",
+      '[data-test-id*="model-response"]',
+      "div.conversation-turn:last-child"
     ];
     for (const sel of selectors) {
       const elements = document.querySelectorAll(sel);
@@ -234,7 +223,7 @@
 
   function findResponseCopyButton(container) {
     if (!container) return null;
-    const parentTurn = container.closest('message-content, model-response, .conversation-turn') || container.parentElement;
+    const parentTurn = container.closest("message-content, model-response, .conversation-turn") || container.parentElement;
     const scope = parentTurn || container;
     const selectors = [
       'button[aria-label*="Copy" i]',
@@ -264,17 +253,17 @@
         // Skip thinking / reasoning collapse blocks in final code extraction
         if (
           child.classList &&
-          (child.classList.contains('thought-container') ||
-           child.classList.contains('model-thought') ||
-           child.tagName.toLowerCase() === 'model-thought')
+          (child.classList.contains("thought-container") ||
+            child.classList.contains("model-thought") ||
+            child.tagName.toLowerCase() === "model-thought")
         ) {
           continue;
         }
 
         const tag = child.tagName.toLowerCase();
 
-        if (tag === 'pre') {
-          const codeEl = child.querySelector('code');
+        if (tag === "pre") {
+          const codeEl = child.querySelector("code");
           let lang = "";
           if (codeEl) {
             const className = codeEl.className || "";
@@ -283,24 +272,24 @@
           }
           const codeContent = codeEl ? codeEl.innerText : child.innerText;
           result += `\n\`\`\`${lang}\n${codeContent.trim()}\n\`\`\`\n\n`;
-        } else if (tag === 'code') {
+        } else if (tag === "code") {
           result += `\`${child.innerText}\``;
-        } else if (tag === 'p') {
+        } else if (tag === "p") {
           result += `\n${htmlToMarkdown(child)}\n`;
-        } else if (tag === 'ul') {
+        } else if (tag === "ul") {
           result += `\n${htmlToMarkdown(child)}\n`;
-        } else if (tag === 'ol') {
+        } else if (tag === "ol") {
           result += `\n${htmlToMarkdown(child)}\n`;
-        } else if (tag === 'li') {
+        } else if (tag === "li") {
           result += `\n* ${htmlToMarkdown(child)}`;
         } else if (/^h[1-6]$/.test(tag)) {
           const level = parseInt(tag[1], 10);
           result += `\n${"#".repeat(level)} ${htmlToMarkdown(child)}\n`;
-        } else if (tag === 'strong' || tag === 'b') {
+        } else if (tag === "strong" || tag === "b") {
           result += `**${htmlToMarkdown(child)}**`;
-        } else if (tag === 'em' || tag === 'i') {
+        } else if (tag === "em" || tag === "i") {
           result += `*${htmlToMarkdown(child)}*`;
-        } else if (tag === 'br') {
+        } else if (tag === "br") {
           result += "\n";
         } else {
           result += htmlToMarkdown(child);
@@ -311,21 +300,20 @@
     return result;
   }
 
-  // 6. Complete prompt execution lifecycle
+  // 5. Complete prompt execution lifecycle
   async function handleExecutePrompt(req) {
     if (isExecuting) {
-      console.warn("[Gemini-Bridge] Resetting previously active execution for new request:", req.id);
+      console.warn("[Gemini-Bridge] Overriding previous request for new request:", req.id);
     }
-
     isExecuting = true;
     console.log(`[Gemini-Bridge] Starting execution for request ${req.id}...`);
 
     try {
-      // Step A: Ensure model selector is on Argon if requested (soft check)
+      // Step A: Ensure model selector is on Argon if requested
       try {
         await ensureModelSelected(req.model);
-      } catch (modelErr) {
-        console.warn("[Gemini-Bridge] Model switcher notice:", modelErr);
+      } catch (mErr) {
+        console.warn("[Gemini-Bridge] Model check skipped:", mErr);
       }
 
       // Step B: Locate input field
@@ -334,102 +322,92 @@
         throw new Error("Could not find Gemini chat input field.");
       }
 
-      // Step C: Count existing responses before sending
-      const initialResponses = document.querySelectorAll('model-response, message-content, .model-response-text');
-      const initialCount = initialResponses.length;
+      // Step C: Record baseline state before prompt submission
+      const prevEl = getLatestResponseElement();
+      const prevTextLen = prevEl ? (prevEl.innerText || "").length : 0;
 
-      // Step E: Inject prompt into input
+      // Step D: Inject prompt into input
       await injectPrompt(inputEl, req.prompt);
 
-      // Step F: Locate and click Send button
+      // Step E: Locate and click Send button
       const sendBtn = await waitForCondition(() => findSendButton(), 5000, 200);
       if (!sendBtn) {
-        // Fallback: hit Enter key on input element
-        console.log("[Gemini-Bridge] Send button disabled or not found; sending Enter key...");
-        inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        console.log("[Gemini-Bridge] Send button not found; sending Enter key...");
+        inputEl.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
       } else {
         console.log("[Gemini-Bridge] Clicking Send button...");
         sendBtn.click();
       }
 
-      // Step G: Wait for response to start and complete (taking Thinking into account)
-      console.log("[Gemini-Bridge] Waiting for Gemini 4 Argon to generate response...");
-      await sleep(1500);
-
+      // Step F: Wait for response generation to complete
+      console.log("[Gemini-Bridge] Waiting for Gemini response generation...");
       const maxWaitMs = (req.timeout_secs || 240) * 1000;
       const startTime = Date.now();
-      let lastTextLength = 0;
+      let lastLen = 0;
       let stableCount = 0;
+      let hasStarted = false;
 
       while (Date.now() - startTime < maxWaitMs) {
-        await sleep(800);
+        await sleep(700);
 
         const stopBtn = findStopButton();
-        const currentResponseEl = getLatestResponseElement();
-        const currentCount = document.querySelectorAll('model-response, message-content, .model-response-text').length;
+        const curEl = getLatestResponseElement();
+        const curText = curEl ? (curEl.innerText || "").trim() : "";
+        const curLen = curText.length;
 
-        if (currentCount > initialCount && currentResponseEl) {
-          const currentText = currentResponseEl.innerText || "";
-          const copyBtn = findResponseCopyButton(currentResponseEl);
+        // Has generation started?
+        if (stopBtn || curLen > prevTextLen) {
+          hasStarted = true;
+        }
 
-          // Complete condition: Stop button is gone AND copy button appeared
-          if (!stopBtn && copyBtn && currentText.length > 0) {
-            console.log("[Gemini-Bridge] Generation complete (Stop button absent & Copy action button visible)! Length:", currentText.length);
-            break;
-          }
-
-          // Fallback: If copy button selector changed, verify stillness for ~3.2 seconds
-          if (!stopBtn && currentText.length > 0 && currentText.length === lastTextLength) {
-            stableCount++;
-            if (stableCount >= 4) {
-              console.log("[Gemini-Bridge] Generation complete via stillness fallback. Length:", currentText.length);
-              break;
+        if (hasStarted) {
+          // If Stop button is gone and text is longer than baseline
+          if (!stopBtn && curLen > prevTextLen) {
+            // Check if text has stopped growing
+            if (curLen === lastLen) {
+              stableCount++;
+              if (stableCount >= 2) { // 1.4s of stability
+                console.log("[Gemini-Bridge] Response complete! Length:", curLen);
+                break;
+              }
+            } else {
+              stableCount = 0;
+              lastLen = curLen;
             }
           } else {
             stableCount = 0;
-            lastTextLength = currentText.length;
+            lastLen = curLen;
           }
         }
       }
 
-      // Step H: Extract pristine Markdown (prioritizing intercepted writeText -> clipboard -> DOM parser)
+      // Step G: Extract Markdown
       const finalResponseEl = getLatestResponseElement();
       if (!finalResponseEl) {
         throw new Error("No response element appeared after prompt submission.");
       }
 
       let markdown = "";
-      capturedMarkdownFromPage = null; // Reset capture variable
+      capturedMarkdownFromPage = null;
+
+      // Try native copy button
       const copyBtn = findResponseCopyButton(finalResponseEl);
-
       if (copyBtn) {
-        console.log("[Gemini-Bridge] Triggering native Copy button...");
-        copyBtn.click();
-
-        // 1. Check if injected.js captured text via intercepted navigator.clipboard.writeText
-        const waitStart = Date.now();
-        while (Date.now() - waitStart < 600 && !capturedMarkdownFromPage) {
-          await sleep(50);
-        }
-
-        if (capturedMarkdownFromPage && capturedMarkdownFromPage.trim().length > 0) {
-          markdown = capturedMarkdownFromPage.trim();
-          console.log("[Gemini-Bridge] Captured pristine Markdown via MainWorld interceptor! Bytes:", markdown.length);
-        } else {
-          // 2. Fallback to direct clipboard read if OS focus allows
-          try {
-            const clipboardText = await navigator.clipboard.readText();
-            if (clipboardText && clipboardText.trim().length > 0) {
-              markdown = clipboardText.trim();
-              console.log("[Gemini-Bridge] Extracted Markdown from clipboard. Bytes:", markdown.length);
-            }
-          } catch (clipErr) {
-            console.debug("[Gemini-Bridge] Clipboard read unavailable (expected in background window):", clipErr);
+        try {
+          console.log("[Gemini-Bridge] Triggering native Copy button...");
+          copyBtn.click();
+          const waitStart = Date.now();
+          while (Date.now() - waitStart < 500 && !capturedMarkdownFromPage) {
+            await sleep(50);
           }
-        }
+          if (capturedMarkdownFromPage && capturedMarkdownFromPage.trim().length > 0) {
+            markdown = capturedMarkdownFromPage.trim();
+            console.log("[Gemini-Bridge] Captured Markdown via MainWorld interceptor! Bytes:", markdown.length);
+          }
+        } catch (_) {}
       }
 
-      // 3. Fallback: clean DOM parser with Thinking blocks stripped
+      // Fallback: parse DOM directly
       if (!markdown || markdown.length === 0) {
         markdown = htmlToMarkdown(finalResponseEl).trim();
         if (!markdown || markdown.length === 0) {
@@ -438,7 +416,7 @@
       }
 
       const finalUrl = window.location.href;
-      console.log("[Gemini-Bridge] Execution successful. Session URL:", finalUrl);
+      console.log("[Gemini-Bridge] Execution successful. URL:", finalUrl);
 
       port.postMessage({
         action: "PROMPT_FINISHED",
@@ -467,7 +445,7 @@
 
   // Utilities
   function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async function waitForCondition(checkFn, timeoutMs, intervalMs = 200) {
@@ -480,10 +458,8 @@
     return null;
   }
 
-  // Connect port on page load
   connectPort();
 
-  // Periodic heartbeat / status check
   setInterval(() => {
     if (!port) connectPort();
     else sendStatusSync();
