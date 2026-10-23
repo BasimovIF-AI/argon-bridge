@@ -15,12 +15,17 @@
     }
   });
 
+  function isContextValid() {
+    try {
+      return Boolean(chrome.runtime && chrome.runtime.id);
+    } catch (_) {
+      return false;
+    }
+  }
+
   // 1. Maintain long-lived port connection to background service worker
   function connectPort() {
-    // If extension was reloaded in chrome://extensions, stop execution cleanly
-    if (!chrome.runtime || !chrome.runtime.id) {
-      return;
-    }
+    if (!isContextValid()) return;
 
     try {
       port = chrome.runtime.connect({ name: "gemini_tab" });
@@ -33,34 +38,52 @@
       });
 
       port.onDisconnect.addListener(() => {
+        const _ = chrome.runtime?.lastError; // Cleanly consume error to prevent unchecked runtime warnings
         port = null;
-        if (chrome.runtime && chrome.runtime.id) {
-          setTimeout(connectPort, 2000);
+        if (isContextValid()) {
+          setTimeout(() => {
+            if (isContextValid()) connectPort();
+          }, 2000);
         }
       });
 
       sendStatusSync();
-    } catch (e) {
-      if (e && e.message && e.message.includes("Extension context invalidated")) {
-        // Page was loaded under an older extension version; cleanly stop retry loop
-        return;
-      }
-      setTimeout(connectPort, 3000);
+    } catch (_) {
+      // If extension context invalidated or any connect error, cleanly terminate retry loop.
+      // Do NOT log to console.warn/error to avoid spamming chrome://extensions.
+      return;
     }
   }
 
   function sendStatusSync() {
-    if (port) {
-      port.postMessage({
-        action: "STATUS_SYNC",
-        current_chat_url: window.location.href,
-        current_model: detectCurrentModel()
-      });
+    if (port && isContextValid()) {
+      try {
+        port.postMessage({
+          action: "STATUS_SYNC",
+          current_chat_url: window.location.href,
+          current_model: detectCurrentModel()
+        });
+      } catch (_) {}
     }
+  }
+
+  function triggerClick(el) {
+    if (!el) return;
+    el.focus();
+    el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    el.click();
   }
 
   // 2. Model Detection and Selection
   function detectCurrentModel() {
+    const btn = findModelPickerButton();
+    if (btn) {
+      const text = (btn.innerText || btn.textContent || "").trim();
+      if (text.length > 0) return text;
+    }
     const candidates = document.querySelectorAll(
       'button[aria-label*="model" i], button[aria-label*="модел" i], .model-title, [data-test-id*="model" i]'
     );
@@ -75,14 +98,36 @@
 
   function findModelPickerButton() {
     // 1. Search inside or near the prompt container
-    const inputContainer = document.querySelector('rich-textarea, div[role="textbox"], form, .input-area')?.closest('form, div[class*="input"], div[class*="prompt"], [data-test-id*="input"]');
-    const container = inputContainer || document.body;
-    const buttons = Array.from(container.querySelectorAll('button, div[role="button"], [role="combobox"]'));
+    const inputEl = findInputField();
+    const container = inputEl
+      ? inputEl.closest('form, [class*="input-area"], [class*="chat-input"], [class*="prompt"]') ||
+        inputEl.parentElement?.parentElement?.parentElement?.parentElement ||
+        document.body
+      : document.body;
 
-    for (const btn of buttons) {
-      if (btn.closest('div[class*="profile"], div[class*="user"], nav, aside, .side-nav, .user-badge')) {
-        continue;
+    const localButtons = Array.from(container.querySelectorAll('button, div[role="button"], [role="combobox"]'));
+    for (const btn of localButtons) {
+      if (btn.closest('nav, aside, .side-nav, div[class*="profile"], div[class*="user"], .user-badge')) continue;
+
+      const text = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+      if (
+        text.includes("flash-lite") ||
+        text.includes("flash") ||
+        text.includes("argon") ||
+        text.includes("pro") ||
+        text.includes("advanced")
+      ) {
+        return btn;
       }
+    }
+
+    // 2. Global search excluding sidebar
+    const allButtons = Array.from(document.querySelectorAll('button, div[role="button"], [role="combobox"]'));
+    for (const btn of allButtons) {
+      const rect = btn.getBoundingClientRect();
+      if (rect.left < 200) continue; // Skip sidebar
+      if (btn.closest('nav, aside, .side-nav, div[class*="profile"], div[class*="user"], .user-badge')) continue;
+
       const text = (btn.innerText || btn.textContent || "").trim().toLowerCase();
       if (
         text.includes("flash-lite") ||
@@ -91,88 +136,162 @@
         (text.includes("pro") && text.length < 25) ||
         (text.includes("advanced") && text.length < 25)
       ) {
-        if (btn.offsetParent !== null) {
-          return btn;
-        }
-      }
-    }
-
-    // Fallback: search anywhere on page excluding sidebar & user profile
-    const all = Array.from(document.querySelectorAll('button, div[role="button"], [role="combobox"]'));
-    for (const btn of all) {
-      if (btn.closest('nav, aside, .side-nav, div[class*="profile"], div[class*="user"], .user-badge')) {
-        continue;
-      }
-      const text = (btn.innerText || btn.textContent || "").trim().toLowerCase();
-      if (text.includes("flash-lite") || text.includes("flash") || text.includes("argon")) {
-        if (btn.offsetParent !== null) {
-          return btn;
-        }
+        return btn;
       }
     }
     return null;
   }
 
+  let activeModelNotice = null;
+
+  function isItemAvailable(itemEl) {
+    if (itemEl.disabled || itemEl.getAttribute("aria-disabled") === "true") {
+      return false;
+    }
+    const classList = itemEl.className || "";
+    if (classList.includes("disabled") || classList.includes("is-disabled")) {
+      return false;
+    }
+    const fullText = (itemEl.innerText || itemEl.textContent || "").toLowerCase();
+    if (
+      fullText.includes("лимит") ||
+      fullText.includes("обновится") ||
+      fullText.includes("limit") ||
+      fullText.includes("resets") ||
+      fullText.includes("upgrade") ||
+      fullText.includes("превышен")
+    ) {
+      return false;
+    }
+    return true;
+  }
+
   async function ensureModelSelected(targetModel) {
-    const lowerTarget = (targetModel || "argon").toLowerCase();
+    activeModelNotice = null;
+    const target = (targetModel || "argon").toLowerCase();
+    const isProOrArgon = target.includes("argon") || target.includes("аргон") || target.includes("pro");
 
-    // Check if Argon is already visible on the model picker button
-    const currentBtn = findModelPickerButton();
-    if (currentBtn) {
-      const currentText = (currentBtn.innerText || currentBtn.textContent || "").toLowerCase();
-      if (currentText.includes("argon") || currentText.includes("аргон")) {
-        console.log("[Gemini-Bridge] Model 'Argon' is already selected:", currentText);
-        return;
-      }
-    }
-
-    const switcherBtn = findModelPickerButton();
+    // Wait up to 5s for the switcher button to mount
+    const switcherBtn = await waitForCondition(() => findModelPickerButton(), 5000, 200);
     if (!switcherBtn) {
-      console.warn("[Gemini-Bridge] Model picker button not found.");
-      return;
+      throw new Error("Не удалось найти кнопку выбора модели в интерфейсе Gemini.");
     }
 
-    console.log("[Gemini-Bridge] Found model picker button:", switcherBtn.innerText);
-    switcherBtn.click();
-    await sleep(600);
-
-    // Collect all menu options
-    const menuOptions = Array.from(
-      document.querySelectorAll(
-        '[role="menuitem"], [role="option"], mat-option, .mat-mdc-menu-item, div[role="menu"] button, div[role="menu"] div[role="button"], [data-test-id*="model-option"]'
-      )
-    );
-
-    const availableNames = menuOptions.map(o => (o.innerText || o.textContent || "").trim());
-    console.log("[Gemini-Bridge] Available models in menu:", availableNames);
-
-    for (const opt of menuOptions) {
-      const optText = (opt.innerText || opt.textContent || "").toLowerCase();
-      if (optText.includes("argon") || optText.includes("аргон") || optText.includes(lowerTarget)) {
-        console.log("[Gemini-Bridge] Clicking Argon model option:", optText);
-        opt.click();
-        await sleep(600);
+    const currentText = (switcherBtn.innerText || switcherBtn.textContent || "").toLowerCase();
+    if (isProOrArgon) {
+      if (currentText.includes("argon") || currentText.includes("аргон")) {
+        console.log("[Gemini-Bridge] Target model (Argon) is already active:", currentText);
         return;
       }
     }
 
-    // Close menu if option not found
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await sleep(200);
+    console.log("[Gemini-Bridge] Opening model picker menu from button:", switcherBtn.innerText);
+    triggerClick(switcherBtn);
+
+    // Wait up to 4s for menu options to mount in DOM
+    const menuOptions = await waitForCondition(() => {
+      const opts = Array.from(
+        document.querySelectorAll(
+          'gem-menu-item, [role="menuitem"], [role="menuitemradio"], [role="option"], mat-option, .mat-mdc-menu-item, div[role="menu"] button, div[role="menu"] div[role="button"], [data-test-id*="model-option"]'
+        )
+      ).filter(el => el.offsetParent !== null || el.tagName.toLowerCase() === "gem-menu-item");
+      return opts.length > 0 ? opts : null;
+    }, 4000, 150) || [];
+
+    if (menuOptions.length === 0) {
+      console.log("[Gemini-Bridge] No menu options rendered; dismissing.");
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      throw new Error("Не удалось открыть выпадающее меню выбора модели в Gemini.");
+    }
+
+    // Parse options with availability and rate limit awareness
+    const parsedOptions = menuOptions.map((opt, idx) => {
+      const fullText = (opt.innerText || opt.textContent || "").trim();
+      const textLower = fullText.toLowerCase();
+      const available = isItemAvailable(opt);
+
+      let modelType = "other";
+      if (textLower.includes("argon") || textLower.includes("аргон")) modelType = "argon";
+      else if (textLower.includes("pro") || textLower.includes("про")) modelType = "pro";
+      else if (textLower.includes("3.8 flash")) modelType = "flash";
+      else if (textLower.includes("flash-lite") || textLower.includes("lite")) modelType = "flash-lite";
+
+      return { element: opt, text: fullText, modelType, available, idx };
+    });
+
+    console.log("[Gemini-Bridge] Parsed model menu options:", JSON.stringify(parsedOptions.map(p => ({
+      idx: p.idx,
+      type: p.modelType,
+      available: p.available,
+      text: p.text.replace(/\n/g, " ")
+    })), null, 2));
+
+    let chosen = null;
+
+    if (isProOrArgon) {
+      const argonOpt = parsedOptions.find(o => o.modelType === "argon");
+      if (!argonOpt) {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await sleep(200);
+        throw new Error("Модель Gemini 4 Argon не найдена в списке моделей интерфейса Gemini.");
+      }
+
+      if (!argonOpt.available) {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await sleep(200);
+        const resetMatch = argonOpt.text.match(/(?:обновится|resets?)[^\n]*/i);
+        const resetInfo = resetMatch ? ` (${resetMatch[0].trim()})` : "";
+        throw new Error(`Модель Gemini 4 Argon недоступна: исчерпан лимит запросов${resetInfo}. Запрос отклонён мостом без отправки.`);
+      }
+
+      chosen = argonOpt;
+    } else {
+      chosen = parsedOptions.find(o => (o.modelType === "flash" || o.modelType === "flash-lite") && o.available) 
+            || parsedOptions.find(o => o.available);
+      if (!chosen) {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await sleep(200);
+        throw new Error("Нет доступных моделей для выполнения запроса.");
+      }
+    }
+
+    if (chosen) {
+      if (chosen.element.classList.contains("selected")) {
+        console.log(`[Gemini-Bridge] Option ${chosen.modelType} is already selected in menu; dismissing.`);
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await sleep(200);
+      } else {
+        console.log(`[Gemini-Bridge] Selecting option: ${chosen.text.replace(/\n/g, " ")} (type: ${chosen.modelType})`);
+        triggerClick(chosen.element);
+        await sleep(600);
+      }
+      const afterBtn = findModelPickerButton();
+      const afterText = afterBtn ? (afterBtn.innerText || afterBtn.textContent || "").toLowerCase() : "";
+      console.log("[Gemini-Bridge] Active model is now:", afterText);
+      if (isProOrArgon && !afterText.includes("argon") && !afterText.includes("аргон")) {
+        throw new Error(`Не удалось переключить модель на Gemini 4 Argon (активна: ${afterText || "Flash"}). Запрос отклонён.`);
+      }
+    } else {
+      console.log("[Gemini-Bridge] No selectable option found; dismissing menu.");
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await sleep(200);
+      throw new Error("Не удалось активировать модель Gemini 4 Argon.");
+    }
   }
 
   // 3. Input Injection & Sending
   function findInputField() {
     const selectors = [
-      'div[contenteditable="true"][role="textbox"]',
       'rich-textarea div[contenteditable="true"]',
+      'div[contenteditable="true"][role="textbox"]',
+      'div[contenteditable="true"]',
       'div.ql-editor',
       'textarea[aria-label*="prompt" i]',
       'textarea'
     ];
     for (const sel of selectors) {
       const el = document.querySelector(sel);
-      if (el && el.offsetParent !== null) {
+      if (el) {
         return el;
       }
     }
@@ -342,22 +461,21 @@
     console.log(`[Gemini-Bridge] Starting execution for request ${req.id}...`);
 
     try {
-      // Step A: Ensure model selector is on Argon if requested
-      try {
-        await ensureModelSelected(req.model);
-      } catch (mErr) {
-        console.warn("[Gemini-Bridge] Model check skipped:", mErr);
-      }
-
-      // Step B: Locate input field
-      const inputEl = await waitForCondition(() => findInputField(), 10000, 300);
+      // Step A: Locate input field first so we know the prompt area is fully loaded
+      const inputEl = await waitForCondition(() => findInputField(), 15000, 300);
       if (!inputEl) {
         throw new Error("Could not find Gemini chat input field.");
       }
 
+      // Step B: Ensure model selector is on Argon (throws immediately if Argon is unavailable)
+      await ensureModelSelected(req.model);
+
       // Step C: Record baseline state before prompt submission
-      const prevEl = getLatestResponseElement();
-      const prevTextLen = prevEl ? (prevEl.innerText || "").length : 0;
+      const allResponsesBefore = Array.from(
+        document.querySelectorAll('model-response, message-content, .model-response-text, [data-test-id*="model-response"]')
+      );
+      const initialResponseCount = allResponsesBefore.length;
+      const previousLastEl = allResponsesBefore[allResponsesBefore.length - 1] || null;
 
       // Step D: Inject prompt into input
       await injectPrompt(inputEl, req.prompt);
@@ -376,7 +494,7 @@
       console.log("[Gemini-Bridge] Waiting for Gemini response generation...");
       const maxWaitMs = (req.timeout_secs || 240) * 1000;
       const startTime = Date.now();
-      let lastLen = 0;
+      let lastText = "";
       let stableCount = 0;
       let hasStarted = false;
 
@@ -384,32 +502,35 @@
         await sleep(700);
 
         const stopBtn = findStopButton();
-        const curEl = getLatestResponseElement();
-        const curText = curEl ? (curEl.innerText || "").trim() : "";
-        const curLen = curText.length;
+        const currentResponses = Array.from(
+          document.querySelectorAll('model-response, message-content, .model-response-text, [data-test-id*="model-response"]')
+        );
+        const currentLastEl = currentResponses[currentResponses.length - 1] || null;
 
         // Has generation started?
-        if (stopBtn || curLen > prevTextLen) {
+        if (stopBtn || currentResponses.length > initialResponseCount || (currentLastEl && currentLastEl !== previousLastEl)) {
           hasStarted = true;
         }
 
         if (hasStarted) {
-          // If Stop button is gone and text is longer than baseline
-          if (!stopBtn && curLen > prevTextLen) {
-            // Check if text has stopped growing
-            if (curLen === lastLen) {
+          const curText = currentLastEl ? (currentLastEl.innerText || "").trim() : "";
+
+          // Generation has started. Now check if it has finished:
+          // Stop button must be GONE and text must have content (> 0 chars)
+          if (!stopBtn && curText.length > 0) {
+            if (curText === lastText) {
               stableCount++;
               if (stableCount >= 2) { // 1.4s of stability
-                console.log("[Gemini-Bridge] Response complete! Length:", curLen);
+                console.log("[Gemini-Bridge] Response complete! Length:", curText.length);
                 break;
               }
             } else {
               stableCount = 0;
-              lastLen = curLen;
+              lastText = curText;
             }
           } else {
             stableCount = 0;
-            lastLen = curLen;
+            lastText = curText;
           }
         }
       }
@@ -446,6 +567,11 @@
         if (!markdown || markdown.length === 0) {
           markdown = (finalResponseEl.innerText || finalResponseEl.textContent || "").trim();
         }
+      }
+
+      // Prepend model rate-limit warning if fallback occurred
+      if (activeModelNotice && markdown && markdown.length > 0) {
+        markdown = `> ⚠️ **Gemini-Bridge:** ${activeModelNotice}\n\n` + markdown;
       }
 
       const finalUrl = window.location.href;
@@ -493,10 +619,16 @@
 
   connectPort();
 
-  setInterval(() => {
-    if (!chrome.runtime || !chrome.runtime.id) return;
-    if (!port) connectPort();
-    else sendStatusSync();
+  const heartbeatTimer = setInterval(() => {
+    if (!isContextValid()) {
+      clearInterval(heartbeatTimer);
+      return;
+    }
+    if (!port) {
+      connectPort();
+    } else {
+      sendStatusSync();
+    }
   }, 10000);
 
 })();

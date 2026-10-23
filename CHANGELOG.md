@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-10-23
+
+### Added
+- **Chrome Extension (v0.2.6)**:
+  - Strict model selector targeting custom component `<gem-menu-item>`.
+  - Rate-limit awareness: checks `aria-disabled="true"` and limit reset times (`Лимит обновится ...`).
+  - Strict "Argon Only" policy: immediately rejects with clear error reason if Argon is rate-limited without sending prompt to fallback models.
+  - Silent on-demand tab resolution: eliminates duplicate tabs on reload/startup and only opens a tab if none exists in browser.
+  - Multi-turn conversation tracking: detects new response turns and tracks text stability until stop button disappears.
+  - Context invalidation safety: suppresses Chrome warnings on extension reload.
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

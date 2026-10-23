@@ -19,8 +19,8 @@ chrome.runtime.onConnect.addListener((port) => {
     console.log(`[Gemini-Bridge] Gemini tab ${tabId} connected via port.`);
     geminiPorts.set(tabId, port);
 
-    // If we don't have a dedicated tab yet, adopt this one
-    if (dedicatedBridgeTabId === null) {
+    // If no dedicated tab assigned, or if this is the dedicated tab, record it
+    if (dedicatedBridgeTabId === null || dedicatedBridgeTabId === tabId) {
       dedicatedBridgeTabId = tabId;
     }
 
@@ -32,6 +32,7 @@ chrome.runtime.onConnect.addListener((port) => {
     });
 
     port.onDisconnect.addListener(() => {
+      const _ = chrome.runtime?.lastError; // Cleanly consume error to prevent unchecked runtime warnings
       console.log(`[Gemini-Bridge] Gemini tab ${tabId} disconnected.`);
       geminiPorts.delete(tabId);
       if (dedicatedBridgeTabId === tabId) {
@@ -42,6 +43,15 @@ chrome.runtime.onConnect.addListener((port) => {
 
     broadcastStatus();
   }
+});
+
+// Cleanly handle tab closure
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (dedicatedBridgeTabId === tabId) {
+    console.log(`[Gemini-Bridge] Dedicated tab ${tabId} was closed by user.`);
+    dedicatedBridgeTabId = null;
+  }
+  geminiPorts.delete(tabId);
 });
 
 // 2. Persistent WebSocket with Rust Bridge
@@ -65,9 +75,6 @@ function connectWebSocket() {
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
     broadcastStatus();
-
-    // Automatically ensure dedicated Gemini tab is open
-    ensureGeminiTab();
   };
 
   socket.onmessage = async (event) => {
@@ -75,7 +82,7 @@ function connectWebSocket() {
       const msg = JSON.parse(event.data);
       handleBridgeMessage(msg);
     } catch (err) {
-      console.error("[Gemini-Bridge] Failed to parse message from bridge:", err);
+      console.log("[Gemini-Bridge] Failed to parse message from bridge:", err);
     }
   };
 
@@ -133,32 +140,9 @@ function waitForTabPort(tabId, timeoutMs = 15000) {
   });
 }
 
-// Automatically ensure a dedicated Gemini tab is always open
-async function ensureGeminiTab() {
-  const tabs = await chrome.tabs.query({ url: "*://gemini.google.com/*" });
-  if (tabs.length === 0) {
-    console.log("[Gemini-Bridge] Automatically opening dedicated tab on gemini.google.com...");
-    const tab = await chrome.tabs.create({
-      url: "https://gemini.google.com/app",
-      active: true
-    });
-    dedicatedBridgeTabId = tab.id;
-    return tab;
-  } else {
-    dedicatedBridgeTabId = tabs[0].id;
-    return tabs[0];
-  }
-}
-
-chrome.runtime.onInstalled.addListener(() => {
-  ensureGeminiTab();
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  ensureGeminiTab();
-});
-
-async function getDedicatedTab(targetUrl) {
+// Resolve or automatically open a Gemini tab on-demand only when a prompt is executed
+async function getGeminiTabForExecution() {
+  // 1. If we previously tracked a tab and it's still open, check it
   if (dedicatedBridgeTabId !== null) {
     try {
       const tab = await chrome.tabs.get(dedicatedBridgeTabId);
@@ -170,6 +154,7 @@ async function getDedicatedTab(targetUrl) {
     }
   }
 
+  // 2. Check if the user already has an active or any open Gemini tab in the browser
   const activeTabs = await chrome.tabs.query({ url: "*://gemini.google.com/*", active: true });
   if (activeTabs.length > 0) {
     dedicatedBridgeTabId = activeTabs[0].id;
@@ -182,11 +167,23 @@ async function getDedicatedTab(targetUrl) {
     return allTabs[0];
   }
 
-  return await ensureGeminiTab();
+  // 3. No Gemini tab exists in the browser! Open one on-demand.
+  console.log("[Gemini-Bridge] No open Gemini tab found. Automatically opening new tab on-demand...");
+  try {
+    const tab = await chrome.tabs.create({
+      url: "https://gemini.google.com/app",
+      active: true
+    });
+    dedicatedBridgeTabId = tab.id;
+    return tab;
+  } catch (err) {
+    console.log("[Gemini-Bridge] Failed to create tab:", err);
+    return null;
+  }
 }
 
 async function executePromptOnGemini(req) {
-  const tab = await getDedicatedTab(req.chat_url);
+  const tab = await getGeminiTabForExecution();
 
   if (!tab) {
     sendToBridge({
@@ -208,9 +205,20 @@ async function executePromptOnGemini(req) {
   // Handle URL navigation if required
   const currentUrl = tab.url || "";
   if (req.chat_url && currentUrl !== req.chat_url) {
-    console.log(`[Gemini-Bridge] Navigating dedicated tab ${tab.id} to: ${req.chat_url}`);
-    await chrome.tabs.update(tab.id, { url: req.chat_url });
-    await waitForTabPort(tab.id);
+    console.log(`[Gemini-Bridge] Navigating tab ${tab.id} to: ${req.chat_url}`);
+    geminiPorts.delete(tab.id); // Invalidate old page port so we wait for new page content script
+    try {
+      await chrome.tabs.update(tab.id, { url: req.chat_url });
+      await waitForTabPort(tab.id, 10000);
+    } catch (_) {}
+  } else if (!req.chat_url && currentUrl.includes("/app/") && !currentUrl.endsWith("/app")) {
+    // If user requested a fresh chat and the tab is inside an old conversation, navigate to clean /app
+    console.log(`[Gemini-Bridge] Resetting tab to clean /app for new chat...`);
+    geminiPorts.delete(tab.id); // Invalidate old page port
+    try {
+      await chrome.tabs.update(tab.id, { url: "https://gemini.google.com/app" });
+      await waitForTabPort(tab.id, 10000);
+    } catch (_) {}
   }
 
   // Ensure port is connected
@@ -221,6 +229,7 @@ async function executePromptOnGemini(req) {
   }
 
   if (!port) {
+    // Fallback: check any connected Gemini port
     for (const [tId, p] of geminiPorts.entries()) {
       port = p;
       dedicatedBridgeTabId = tId;

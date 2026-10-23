@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gemini-Bridge: Argon Connector",
-  "version": "0.1.0",
+  "version": "0.2.6",
   "description": "Ultra-fast bridge connecting Antigravity AI Agent with Google Gemini 4 Argon",
   "permissions": [
     "storage",
