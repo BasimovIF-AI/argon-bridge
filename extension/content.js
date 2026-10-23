@@ -314,16 +314,7 @@
   // 6. Complete prompt execution lifecycle
   async function handleExecutePrompt(req) {
     if (isExecuting) {
-      console.warn("[Gemini-Bridge] Execution already in progress.");
-      port.postMessage({
-        action: "PROMPT_FINISHED",
-        id: req.id,
-        status: "ERROR",
-        content: "",
-        chat_url: window.location.href,
-        error: "A prompt is already currently being executed on this tab."
-      });
-      return;
+      console.warn("[Gemini-Bridge] Resetting previously active execution for new request:", req.id);
     }
 
     isExecuting = true;
