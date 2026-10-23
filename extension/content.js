@@ -64,68 +64,92 @@
     return "Gemini (Default)";
   }
 
+  function findModelPickerButton() {
+    // 1. Search inside or near the prompt container
+    const inputContainer = document.querySelector('rich-textarea, div[role="textbox"], form, .input-area')?.closest('form, div[class*="input"], div[class*="prompt"], [data-test-id*="input"]');
+    const container = inputContainer || document.body;
+    const buttons = Array.from(container.querySelectorAll('button, div[role="button"], [role="combobox"]'));
+
+    for (const btn of buttons) {
+      if (btn.closest('div[class*="profile"], div[class*="user"], nav, aside, .side-nav, .user-badge')) {
+        continue;
+      }
+      const text = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+      if (
+        text.includes("flash-lite") ||
+        text.includes("flash") ||
+        text.includes("argon") ||
+        (text.includes("pro") && text.length < 25) ||
+        (text.includes("advanced") && text.length < 25)
+      ) {
+        if (btn.offsetParent !== null) {
+          return btn;
+        }
+      }
+    }
+
+    // Fallback: search anywhere on page excluding sidebar & user profile
+    const all = Array.from(document.querySelectorAll('button, div[role="button"], [role="combobox"]'));
+    for (const btn of all) {
+      if (btn.closest('nav, aside, .side-nav, div[class*="profile"], div[class*="user"], .user-badge')) {
+        continue;
+      }
+      const text = (btn.innerText || btn.textContent || "").trim().toLowerCase();
+      if (text.includes("flash-lite") || text.includes("flash") || text.includes("argon")) {
+        if (btn.offsetParent !== null) {
+          return btn;
+        }
+      }
+    }
+    return null;
+  }
+
   async function ensureModelSelected(targetModel) {
     const lowerTarget = (targetModel || "argon").toLowerCase();
 
-    // Check all buttons on the page
-    const allButtons = Array.from(document.querySelectorAll('button, div[role="button"], [role="combobox"]'));
-
-    // Check if Argon is already active
-    for (const btn of allButtons) {
-      const text = (btn.innerText || btn.textContent || "").toLowerCase();
-      if (text.includes("argon")) {
-        console.log("[Gemini-Bridge] Model 'Argon' is already active.");
+    // Check if Argon is already visible on the model picker button
+    const currentBtn = findModelPickerButton();
+    if (currentBtn) {
+      const currentText = (currentBtn.innerText || currentBtn.textContent || "").toLowerCase();
+      if (currentText.includes("argon") || currentText.includes("аргон")) {
+        console.log("[Gemini-Bridge] Model 'Argon' is already selected:", currentText);
         return;
       }
     }
 
-    // Look for the model switcher button (often next to prompt area, showing Flash, Flash-Lite, Pro, etc.)
-    let switcherBtn = null;
-    for (const btn of allButtons) {
-      const text = (btn.innerText || btn.textContent || "").toLowerCase().trim();
-      const aria = (btn.getAttribute("aria-label") || "").toLowerCase();
+    const switcherBtn = findModelPickerButton();
+    if (!switcherBtn) {
+      console.warn("[Gemini-Bridge] Model picker button not found.");
+      return;
+    }
 
-      if (
-        text.includes("flash-lite") ||
-        text.includes("flash") ||
-        text.includes("pro") ||
-        text.includes("argon") ||
-        aria.includes("model") ||
-        aria.includes("модел")
-      ) {
-        if (btn.offsetParent !== null) {
-          switcherBtn = btn;
-          break;
-        }
+    console.log("[Gemini-Bridge] Found model picker button:", switcherBtn.innerText);
+    switcherBtn.click();
+    await sleep(600);
+
+    // Collect all menu options
+    const menuOptions = Array.from(
+      document.querySelectorAll(
+        '[role="menuitem"], [role="option"], mat-option, .mat-mdc-menu-item, div[role="menu"] button, div[role="menu"] div[role="button"], [data-test-id*="model-option"]'
+      )
+    );
+
+    const availableNames = menuOptions.map(o => (o.innerText || o.textContent || "").trim());
+    console.log("[Gemini-Bridge] Available models in menu:", availableNames);
+
+    for (const opt of menuOptions) {
+      const optText = (opt.innerText || opt.textContent || "").toLowerCase();
+      if (optText.includes("argon") || optText.includes("аргон") || optText.includes(lowerTarget)) {
+        console.log("[Gemini-Bridge] Clicking Argon model option:", optText);
+        opt.click();
+        await sleep(600);
+        return;
       }
     }
 
-    if (switcherBtn) {
-      console.log("[Gemini-Bridge] Found model picker button:", switcherBtn.innerText);
-      switcherBtn.click();
-      await sleep(600);
-
-      // Search menu options for Argon
-      const menuOptions = Array.from(
-        document.querySelectorAll(
-          '[role="menuitem"], [role="option"], mat-option, .mat-mdc-menu-item, button, div[role="button"]'
-        )
-      );
-
-      for (const opt of menuOptions) {
-        const optText = (opt.innerText || opt.textContent || "").toLowerCase();
-        if (optText.includes("argon")) {
-          console.log("[Gemini-Bridge] Selecting Argon model from dropdown:", optText);
-          opt.click();
-          await sleep(600);
-          return;
-        }
-      }
-
-      // Close dropdown if not found
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-      await sleep(200);
-    }
+    // Close menu if option not found
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await sleep(200);
   }
 
   // 3. Input Injection & Sending
