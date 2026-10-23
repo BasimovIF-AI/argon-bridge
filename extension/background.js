@@ -3,8 +3,9 @@
 const WS_URL = "ws://127.0.0.1:8765";
 let socket = null;
 let reconnectTimer = null;
+let reconnectDelay = 5000; // Start with 5s backoff
+const MAX_RECONNECT_DELAY = 30000; // Max 30s backoff
 let activeGeminiPort = null;
-let pendingPromptWaiters = new Map(); // id -> resolve/reject
 
 console.log("[Gemini-Bridge] Service Worker initialized.");
 
@@ -13,6 +14,10 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "gemini_tab") {
     console.log("[Gemini-Bridge] Gemini tab connected via port.");
     activeGeminiPort = port;
+
+    // When Gemini tab connects, ensure WebSocket is connected or retry immediately
+    reconnectDelay = 2000;
+    connectWebSocket();
 
     port.onMessage.addListener((msg) => {
       handleContentMessage(msg);
@@ -32,21 +37,22 @@ chrome.runtime.onConnect.addListener((port) => {
 
 // 2. Establish and maintain persistent WebSocket with Rust Bridge
 function connectWebSocket() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-    return;
+  if (socket) {
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+      return;
+    }
   }
 
-  console.log(`[Gemini-Bridge] Connecting to Rust bridge at ${WS_URL}...`);
   try {
     socket = new WebSocket(WS_URL);
-  } catch (err) {
-    console.warn("[Gemini-Bridge] WebSocket creation failed:", err);
+  } catch (_) {
     scheduleReconnect();
     return;
   }
 
   socket.onopen = () => {
-    console.log("[Gemini-Bridge] Connected to Rust bridge!");
+    console.log("[Gemini-Bridge] Connected to Rust bridge at " + WS_URL);
+    reconnectDelay = 5000; // Reset backoff on successful connection
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
     broadcastStatus();
@@ -55,23 +61,21 @@ function connectWebSocket() {
   socket.onmessage = async (event) => {
     try {
       const msg = JSON.parse(event.data);
-      console.log("[Gemini-Bridge] Inbound message from bridge:", msg.type, msg.id || "");
       handleBridgeMessage(msg);
     } catch (err) {
-      console.error("[Gemini-Bridge] Failed to parse message from bridge:", err, event.data);
+      console.error("[Gemini-Bridge] Failed to parse message from bridge:", err);
     }
   };
 
-  socket.onclose = (event) => {
-    console.log("[Gemini-Bridge] WebSocket closed. Code:", event.code);
+  socket.onclose = () => {
     chrome.action.setBadgeText({ text: "OFF" });
     chrome.action.setBadgeBackgroundColor({ color: "#ef4444" });
     socket = null;
     scheduleReconnect();
   };
 
-  socket.onerror = (err) => {
-    console.warn("[Gemini-Bridge] WebSocket error:", err);
+  socket.onerror = () => {
+    // Silently handle error to prevent spamming DevTools/Extension error list
     socket = null;
   };
 }
@@ -80,8 +84,9 @@ function scheduleReconnect() {
   if (reconnectTimer) return;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
+    reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_RECONNECT_DELAY);
     connectWebSocket();
-  }, 3000);
+  }, reconnectDelay);
 }
 
 // 3. Handle messages received from Rust Bridge
@@ -96,12 +101,9 @@ async function handleBridgeMessage(msg) {
 }
 
 async function executePromptOnGemini(req) {
-  // Check if we have an active Gemini tab connected
   if (!activeGeminiPort) {
-    // Try to find an existing Gemini tab or open a new one
     const tabs = await chrome.tabs.query({ url: "*://gemini.google.com/*" });
     if (tabs.length === 0) {
-      console.log("[Gemini-Bridge] No Gemini tab found. Creating new tab...");
       const targetUrl = req.chat_url || "https://gemini.google.com/app";
       await chrome.tabs.create({ url: targetUrl, active: true });
       sendToBridge({
@@ -128,7 +130,6 @@ async function executePromptOnGemini(req) {
     return;
   }
 
-  // Forward prompt execution to content script
   activeGeminiPort.postMessage({
     action: "EXECUTE_PROMPT",
     id: req.id,
@@ -177,5 +178,5 @@ function broadcastStatus() {
   });
 }
 
-// Initial connect
+// Initial connection attempt
 connectWebSocket();

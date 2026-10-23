@@ -8,6 +8,7 @@
 !/CHANGELOG.md
 !/ARCHITECTURE.md
 !/build.ps1
+!/start-bridge.bat
 
 # Rust core
 !/Cargo.toml
