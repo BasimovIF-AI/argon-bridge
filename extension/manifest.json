@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini-Bridge: Argon Connector",
+  "version": "0.1.0",
+  "description": "Ultra-fast bridge connecting Antigravity AI Agent with Google Gemini 4 Argon",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://gemini.google.com/*",
+    "ws://127.0.0.1:8765/*",
+    "ws://localhost:8765/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://gemini.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Gemini-Bridge Status"
+  }
+}

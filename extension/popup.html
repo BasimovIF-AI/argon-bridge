@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Gemini-Bridge</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 16px;
+      width: 280px;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+    h2 {
+      font-size: 15px;
+      margin-top: 0;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .badge {
+      font-size: 10px;
+      background: #3b82f6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .status-card {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+    .online { background-color: #22c55e; box-shadow: 0 0 6px #22c55e; }
+    .offline { background-color: #ef4444; }
+    .btn {
+      width: 100%;
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 12px;
+      margin-top: 4px;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #1d4ed8;
+    }
+    .btn-secondary {
+      background: #334155;
+    }
+    .btn-secondary:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body>
+  <h2>Gemini-Bridge <span class="badge">Argon</span></h2>
+
+  <div class="status-card">
+    <div class="status-row">
+      <span>Rust Bridge (WS):</span>
+      <span><span id="bridge-indicator" class="indicator offline"></span><strong id="bridge-status">Offline</strong></span>
+    </div>
+    <div class="status-row">
+      <span>Gemini Tab:</span>
+      <span><span id="tab-indicator" class="indicator offline"></span><strong id="tab-status">Not connected</strong></span>
+    </div>
+  </div>
+
+  <button id="open-gemini-btn" class="btn">Открыть gemini.google.com</button>
+  <button id="reload-btn" class="btn btn-secondary">Переподключить мост</button>
+
+  <script src="popup.js"></script>
+</body>
+</html>

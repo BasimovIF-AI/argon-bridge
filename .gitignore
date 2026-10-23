@@ -1,0 +1,33 @@
+# Deny everything by default
+/*
+
+# Whitelist source files and documentation
+!/.gitignore
+!/AGENTS.md
+!/README.md
+!/CHANGELOG.md
+!/ARCHITECTURE.md
+!/build.ps1
+
+# Rust core
+!/Cargo.toml
+!/Cargo.lock
+!/src/
+!/src/**
+
+# Chrome Extension
+!/extension/
+!/extension/**
+
+# Output directories (track folder structures, ignore generated binaries/archives)
+!/bin/
+/bin/*
+!/bin/.gitkeep
+!/archives/
+/archives/*
+!/archives/.gitkeep
+
+# Exclude build artifacts and runtime state
+/target/
+/sessions.json
+/*.log
