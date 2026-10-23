@@ -71,6 +71,57 @@ pub enum Commands {
 }
 
 impl Commands {
+    pub async fn send_prompt_to_server(
+        server: &str,
+        conversation_id: Option<String>,
+        prompt: String,
+        new_chat: bool,
+    ) -> Result<(String, Option<String>), String> {
+        let (ws_stream, _) = connect_async(server).await
+            .map_err(|e| format!("Could not connect to Gemini-Bridge daemon at {}: {}", server, e))?;
+
+        let (mut write, mut read) = ws_stream.split();
+        let req_id = Uuid::new_v4().to_string();
+
+        let cli_msg = WsMessage::CliExecute {
+            id: req_id.clone(),
+            conversation_id,
+            prompt,
+            new_chat,
+        };
+
+        let msg_str = serde_json::to_string(&cli_msg)
+            .map_err(|e| format!("Serialization error: {}", e))?;
+        write.send(Message::Text(msg_str)).await
+            .map_err(|e| format!("Send error: {}", e))?;
+
+        while let Some(msg_result) = read.next().await {
+            match msg_result {
+                Ok(Message::Text(resp_text)) => {
+                    if let Ok(WsMessage::CliResponse { id, status, content, chat_url, error }) =
+                        serde_json::from_str::<WsMessage>(&resp_text)
+                    {
+                        if id == req_id {
+                            if status == "SUCCESS" {
+                                return Ok((content, chat_url));
+                            } else {
+                                return Err(error.unwrap_or_else(|| "Unknown failure from daemon".to_string()));
+                            }
+                        }
+                    }
+                }
+                Ok(Message::Close(_)) => {
+                    return Err("Connection closed prematurely by daemon".to_string());
+                }
+                Err(e) => {
+                    return Err(format!("WebSocket read error: {}", e));
+                }
+                _ => {}
+            }
+        }
+        Err("No response received from daemon".to_string())
+    }
+
     pub async fn run_ask(
         prompt: Option<String>,
         file: Option<PathBuf>,
@@ -97,57 +148,18 @@ impl Commands {
             std::process::exit(1);
         }
 
-        let (ws_stream, _) = match connect_async(&server).await {
-            Ok(res) => res,
+        match Self::send_prompt_to_server(&server, conversation_id, final_prompt, new_chat).await {
+            Ok((content, chat_url)) => {
+                if let Some(url) = chat_url {
+                    eprintln!("[Session URL: {}]", url);
+                }
+                println!("{}", content);
+                Ok(())
+            }
             Err(e) => {
-                eprintln!("\n[!] Could not connect to Gemini-Bridge daemon at {}", server);
-                eprintln!("[!] Please make sure 'gemini-bridge serve' is running, or Antigravity MCP is active.\nDetail: {}", e);
+                eprintln!("\n[!] {}", e);
                 std::process::exit(1);
             }
-        };
-
-        let (mut write, mut read) = ws_stream.split();
-        let req_id = Uuid::new_v4().to_string();
-
-        let cli_msg = WsMessage::CliExecute {
-            id: req_id.clone(),
-            conversation_id,
-            prompt: final_prompt,
-            new_chat,
-        };
-
-        let msg_str = serde_json::to_string(&cli_msg)?;
-        write.send(Message::Text(msg_str)).await?;
-
-        // Wait for response
-        while let Some(msg_result) = read.next().await {
-            match msg_result? {
-                Message::Text(resp_text) => {
-                    if let Ok(WsMessage::CliResponse { id, status, content, chat_url, error }) =
-                        serde_json::from_str::<WsMessage>(&resp_text)
-                    {
-                        if id == req_id {
-                            if status == "SUCCESS" {
-                                if let Some(url) = chat_url {
-                                    eprintln!("[Session URL: {}]", url);
-                                }
-                                println!("{}", content);
-                                return Ok(());
-                            } else {
-                                eprintln!("Error: {}", error.unwrap_or_else(|| "Unknown failure".to_string()));
-                                std::process::exit(1);
-                            }
-                        }
-                    }
-                }
-                Message::Close(_) => {
-                    eprintln!("Connection closed by server before receiving answer.");
-                    std::process::exit(1);
-                }
-                _ => {}
-            }
         }
-
-        Ok(())
     }
 }

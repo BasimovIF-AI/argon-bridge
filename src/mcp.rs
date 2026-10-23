@@ -10,11 +10,12 @@ use uuid::Uuid;
 pub struct McpServer {
     hub: Arc<WebSocketHub>,
     sessions: SessionStore,
+    port: u16,
 }
 
 impl McpServer {
-    pub fn new(hub: Arc<WebSocketHub>, sessions: SessionStore) -> Self {
-        Self { hub, sessions }
+    pub fn new(hub: Arc<WebSocketHub>, sessions: SessionStore, port: u16) -> Self {
+        Self { hub, sessions, port }
     }
 
     /// Run the MCP server over standard input and standard output.
@@ -167,18 +168,28 @@ impl McpServer {
                             self.sessions.get_chat_url(&conv_id).await
                         };
 
-                        let request_id = Uuid::new_v4().to_string();
-                        let result = self
-                            .hub
-                            .execute_prompt(
-                                request_id,
-                                conv_id.clone(),
-                                existing_chat_url,
-                                "Gemini 4 Argon".to_string(),
+                        let result = if self.hub.is_extension_connected().await {
+                            let request_id = Uuid::new_v4().to_string();
+                            self.hub
+                                .execute_prompt(
+                                    request_id,
+                                    conv_id.clone(),
+                                    existing_chat_url,
+                                    "Gemini 4 Argon".to_string(),
+                                    full_prompt,
+                                    240, // 4 minutes timeout for deep reasoning/code generation
+                                )
+                                .await
+                        } else {
+                            let daemon_url = format!("ws://127.0.0.1:{}", self.port);
+                            crate::cli::Commands::send_prompt_to_server(
+                                &daemon_url,
+                                Some(conv_id.clone()),
                                 full_prompt,
-                                240, // 4 minutes timeout for deep reasoning/code generation
+                                force_new,
                             )
-                            .await;
+                            .await
+                        };
 
                         match result {
                             Ok((answer, new_chat_url)) => {

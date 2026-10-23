@@ -50,15 +50,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let addr: SocketAddr = format!("127.0.0.1:{}", port).parse()?;
             let hub_clone = hub.clone();
 
-            // Spawn background WebSocket server for Chrome Extension connection
+            // Spawn background WebSocket server for Chrome Extension connection if port is free
             tokio::spawn(async move {
                 if let Err(e) = hub_clone.start_server(addr).await {
-                    eprintln!("WebSocket background server error: {}", e);
+                    tracing::debug!("WebSocket background listener not started (already hosted by daemon): {}", e);
                 }
             });
 
             // Run MCP stdio handler on main thread
-            let mcp_server = McpServer::new(hub, sessions);
+            let mcp_server = McpServer::new(hub, sessions, port);
             if let Err(e) = mcp_server.run_stdio().await {
                 eprintln!("MCP Server error: {}", e);
             }
