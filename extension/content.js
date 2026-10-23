@@ -5,6 +5,15 @@
 
   let port = null;
   let isExecuting = false;
+  let capturedMarkdownFromPage = null;
+
+  // Listen for captured Markdown from injected.js (runs in MAIN world)
+  window.addEventListener("message", (event) => {
+    if (event.source === window && event.data && event.data.type === "GEMINI_BRIDGE_CAPTURED_MARKDOWN") {
+      capturedMarkdownFromPage = event.data.markdown;
+      console.log(`[Gemini-Bridge] Received captured Markdown via window.postMessage (${capturedMarkdownFromPage ? capturedMarkdownFromPage.length : 0} bytes)`);
+    }
+  });
 
   // 1. Maintain long-lived port connection to background service worker
   function connectPort() {
@@ -391,30 +400,44 @@
         }
       }
 
-      // Step H: Extract pristine Markdown (prioritize native Copy button over DOM scraping)
+      // Step H: Extract pristine Markdown (prioritizing intercepted writeText -> clipboard -> DOM parser)
       const finalResponseEl = getLatestResponseElement();
       if (!finalResponseEl) {
         throw new Error("No response element appeared after prompt submission.");
       }
 
       let markdown = "";
+      capturedMarkdownFromPage = null; // Reset capture variable
       const copyBtn = findResponseCopyButton(finalResponseEl);
+
       if (copyBtn) {
-        try {
-          console.log("[Gemini-Bridge] Clicking native Copy button for pristine source Markdown...");
-          copyBtn.click();
-          await sleep(250);
-          const clipboardText = await navigator.clipboard.readText();
-          if (clipboardText && clipboardText.trim().length > 0) {
-            markdown = clipboardText.trim();
-            console.log("[Gemini-Bridge] Successfully extracted pristine Markdown from clipboard! Bytes:", markdown.length);
+        console.log("[Gemini-Bridge] Triggering native Copy button...");
+        copyBtn.click();
+
+        // 1. Check if injected.js captured text via intercepted navigator.clipboard.writeText
+        const waitStart = Date.now();
+        while (Date.now() - waitStart < 600 && !capturedMarkdownFromPage) {
+          await sleep(50);
+        }
+
+        if (capturedMarkdownFromPage && capturedMarkdownFromPage.trim().length > 0) {
+          markdown = capturedMarkdownFromPage.trim();
+          console.log("[Gemini-Bridge] Captured pristine Markdown via MainWorld interceptor! Bytes:", markdown.length);
+        } else {
+          // 2. Fallback to direct clipboard read if OS focus allows
+          try {
+            const clipboardText = await navigator.clipboard.readText();
+            if (clipboardText && clipboardText.trim().length > 0) {
+              markdown = clipboardText.trim();
+              console.log("[Gemini-Bridge] Extracted Markdown from clipboard. Bytes:", markdown.length);
+            }
+          } catch (clipErr) {
+            console.debug("[Gemini-Bridge] Clipboard read unavailable (expected in background window):", clipErr);
           }
-        } catch (clipErr) {
-          console.warn("[Gemini-Bridge] Clipboard read unavailable, falling back to DOM parsing:", clipErr);
         }
       }
 
-      // Fallback: parse DOM directly if clipboard read was empty or blocked
+      // 3. Fallback: clean DOM parser with Thinking blocks stripped
       if (!markdown || markdown.length === 0) {
         markdown = htmlToMarkdown(finalResponseEl).trim();
         if (!markdown || markdown.length === 0) {

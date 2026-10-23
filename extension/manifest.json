@@ -21,6 +21,12 @@
   "content_scripts": [
     {
       "matches": ["*://gemini.google.com/*"],
+      "js": ["injected.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://gemini.google.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

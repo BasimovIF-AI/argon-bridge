@@ -170,6 +170,7 @@ impl WebSocketHub {
         });
 
         let mut is_extension_conn = false;
+        let mut heartbeat_task: Option<tokio::task::JoinHandle<()>> = None;
 
         // Process incoming messages
         while let Some(msg_result) = ws_receiver.next().await {
@@ -188,6 +189,23 @@ impl WebSocketHub {
                                 let mut lock = self.extension_tx.lock().await;
                                 *lock = Some(tx.clone());
                                 info!("Chrome Extension registered successfully from {}", addr);
+
+                                // 15-second bidirectional heartbeat to keep Chrome MV3 Service Worker alive
+                                let tx_hb = tx.clone();
+                                heartbeat_task = Some(tokio::spawn(async move {
+                                    let mut interval = tokio::time::interval(Duration::from_secs(15));
+                                    loop {
+                                        interval.tick().await;
+                                        let ping_msg = WsMessage::Ping {
+                                            timestamp: chrono::Utc::now().timestamp(),
+                                        };
+                                        if let Ok(json_str) = serde_json::to_string(&ping_msg) {
+                                            if tx_hb.send(Message::Text(json_str)).is_err() {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }));
                             }
                             let mut st = self.status.write().await;
                             st.connected = connected;
@@ -273,6 +291,9 @@ impl WebSocketHub {
             }
         }
 
+        if let Some(ref task) = heartbeat_task {
+            task.abort();
+        }
         send_task.abort();
 
         if is_extension_conn {
