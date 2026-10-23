@@ -4,14 +4,14 @@
   if (window.__geminiBridgeInjected) return;
   window.__geminiBridgeInjected = true;
 
-  console.log("[Gemini-Bridge:MainWorld] Interceptor loaded.");
+  console.log("[Argon-Bridge:MainWorld] Interceptor loaded.");
 
   // 1. Intercept navigator.clipboard.writeText called by Gemini's Copy button
   if (navigator.clipboard && navigator.clipboard.writeText) {
     const originalWriteText = navigator.clipboard.writeText.bind(navigator.clipboard);
 
     navigator.clipboard.writeText = function (text) {
-      console.log(`[Gemini-Bridge:MainWorld] Intercepted clipboard writeText: ${text ? text.length : 0} bytes`);
+      console.log(`[Argon-Bridge:MainWorld] Intercepted clipboard writeText: ${text ? text.length : 0} bytes`);
       window.postMessage({
         type: "GEMINI_BRIDGE_CAPTURED_MARKDOWN",
         markdown: text

@@ -106,7 +106,7 @@ impl WebSocketHub {
             } else {
                 let mut pending = self.pending_prompts.lock().await;
                 pending.remove(&id);
-                return Err("Chrome Extension is not connected. Open Chrome with the Gemini-Bridge extension on gemini.google.com".to_string());
+                return Err("Chrome Extension is not connected. Open Chrome with the Argon-Bridge extension on gemini.google.com".to_string());
             }
         }
 

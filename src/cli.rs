@@ -9,8 +9,8 @@ use uuid::Uuid;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "gemini-bridge",
-    version = "0.1.0",
+    name = "argon-bridge",
+    version = "0.2.7",
     about = "High-performance bridge between Google Gemini Web (Gemini 4 Argon) and Antigravity AI Agent",
     author = "BasimovIF"
 )]
@@ -78,7 +78,7 @@ impl Commands {
         new_chat: bool,
     ) -> Result<(String, Option<String>), String> {
         let (ws_stream, _) = connect_async(server).await
-            .map_err(|e| format!("Could not connect to Gemini-Bridge daemon at {}: {}", server, e))?;
+            .map_err(|e| format!("Could not connect to Argon-Bridge daemon at {}: {}", server, e))?;
 
         let (mut write, mut read) = ws_stream.split();
         let req_id = Uuid::new_v4().to_string();

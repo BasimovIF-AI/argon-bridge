@@ -71,6 +71,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon-bridge"
+version = "0.2.7"
+dependencies = [
+ "chrono",
+ "clap",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -276,22 +292,6 @@ dependencies = [
  "futures-task",
  "pin-project-lite",
  "slab",
-]
-
-[[package]]
-name = "gemini-bridge"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "futures-util",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

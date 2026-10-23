@@ -1,6 +1,6 @@
 [package]
-name = "gemini-bridge"
-version = "0.1.0"
+name = "argon-bridge"
+version = "0.2.7"
 edition = "2021"
 authors = ["BasimovIF"]
 description = "High-performance bridge between Google Gemini Web (Gemini 4 Argon) and Antigravity AI Agent"

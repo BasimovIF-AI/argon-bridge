@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Automated build, test, and release script for Gemini-Bridge.
+    Automated build, test, and release script for Argon-Bridge.
 .DESCRIPTION
     Conforms to project-standards: compiles native Rust binary, places versioned
     artifact in bin/, and archives source tree to archives/.
@@ -18,8 +18,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$AppName = "gemini-bridge"
-$Version = "0.1.0"
+$AppName = "argon-bridge"
+$Version = "0.2.7"
 $Arch = "windows_amd64"
 $Root = $PSScriptRoot
 

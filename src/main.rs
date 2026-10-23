@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match args.command {
         Commands::Serve { port } => {
             let addr: SocketAddr = format!("127.0.0.1:{}", port).parse()?;
-            info!("Starting Gemini-Bridge background daemon on ws://{}", addr);
+            info!("Starting Argon-Bridge background daemon on ws://{}", addr);
 
             let hub_clone = hub.clone();
             let server_task = tokio::spawn(async move {
@@ -75,7 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Commands::Status { server } => {
-            println!("Querying Gemini-Bridge status at {}...", server);
+            println!("Querying Argon-Bridge status at {}...", server);
             // In a status query, we can connect and ping
             let status_msg = format!("Ensure daemon is running and extension is connected to {}.", server);
             println!("{}", status_msg);

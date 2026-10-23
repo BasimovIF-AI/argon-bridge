@@ -1,7 +1,7 @@
-// content.js - Gemini-Bridge Content Script for gemini.google.com
+// content.js - Argon-Bridge Content Script for gemini.google.com
 
 (function () {
-  console.log("[Gemini-Bridge] Content script loaded on gemini.google.com");
+  console.log("[Argon-Bridge] Content script loaded on gemini.google.com");
 
   let port = null;
   let isExecuting = false;
@@ -11,7 +11,7 @@
   window.addEventListener("message", (event) => {
     if (event.source === window && event.data && event.data.type === "GEMINI_BRIDGE_CAPTURED_MARKDOWN") {
       capturedMarkdownFromPage = event.data.markdown;
-      console.log(`[Gemini-Bridge] Received captured Markdown via window.postMessage (${capturedMarkdownFromPage ? capturedMarkdownFromPage.length : 0} bytes)`);
+      console.log(`[Argon-Bridge] Received captured Markdown via window.postMessage (${capturedMarkdownFromPage ? capturedMarkdownFromPage.length : 0} bytes)`);
     }
   });
 
@@ -31,7 +31,7 @@
       port = chrome.runtime.connect({ name: "gemini_tab" });
 
       port.onMessage.addListener(async (msg) => {
-        console.log("[Gemini-Bridge] Received command from background:", msg.action);
+        console.log("[Argon-Bridge] Received command from background:", msg.action);
         if (msg.action === "EXECUTE_PROMPT") {
           await handleExecutePrompt(msg);
         }
@@ -180,12 +180,12 @@
     const currentText = (switcherBtn.innerText || switcherBtn.textContent || "").toLowerCase();
     if (isProOrArgon) {
       if (currentText.includes("argon") || currentText.includes("аргон")) {
-        console.log("[Gemini-Bridge] Target model (Argon) is already active:", currentText);
+        console.log("[Argon-Bridge] Target model (Argon) is already active:", currentText);
         return;
       }
     }
 
-    console.log("[Gemini-Bridge] Opening model picker menu from button:", switcherBtn.innerText);
+    console.log("[Argon-Bridge] Opening model picker menu from button:", switcherBtn.innerText);
     triggerClick(switcherBtn);
 
     // Wait up to 4s for menu options to mount in DOM
@@ -199,7 +199,7 @@
     }, 4000, 150) || [];
 
     if (menuOptions.length === 0) {
-      console.log("[Gemini-Bridge] No menu options rendered; dismissing.");
+      console.log("[Argon-Bridge] No menu options rendered; dismissing.");
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       throw new Error("Не удалось открыть выпадающее меню выбора модели в Gemini.");
     }
@@ -219,7 +219,7 @@
       return { element: opt, text: fullText, modelType, available, idx };
     });
 
-    console.log("[Gemini-Bridge] Parsed model menu options:", JSON.stringify(parsedOptions.map(p => ({
+    console.log("[Argon-Bridge] Parsed model menu options:", JSON.stringify(parsedOptions.map(p => ({
       idx: p.idx,
       type: p.modelType,
       available: p.available,
@@ -257,22 +257,22 @@
 
     if (chosen) {
       if (chosen.element.classList.contains("selected")) {
-        console.log(`[Gemini-Bridge] Option ${chosen.modelType} is already selected in menu; dismissing.`);
+        console.log(`[Argon-Bridge] Option ${chosen.modelType} is already selected in menu; dismissing.`);
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
         await sleep(200);
       } else {
-        console.log(`[Gemini-Bridge] Selecting option: ${chosen.text.replace(/\n/g, " ")} (type: ${chosen.modelType})`);
+        console.log(`[Argon-Bridge] Selecting option: ${chosen.text.replace(/\n/g, " ")} (type: ${chosen.modelType})`);
         triggerClick(chosen.element);
         await sleep(600);
       }
       const afterBtn = findModelPickerButton();
       const afterText = afterBtn ? (afterBtn.innerText || afterBtn.textContent || "").toLowerCase() : "";
-      console.log("[Gemini-Bridge] Active model is now:", afterText);
+      console.log("[Argon-Bridge] Active model is now:", afterText);
       if (isProOrArgon && !afterText.includes("argon") && !afterText.includes("аргон")) {
         throw new Error(`Не удалось переключить модель на Gemini 4 Argon (активна: ${afterText || "Flash"}). Запрос отклонён.`);
       }
     } else {
-      console.log("[Gemini-Bridge] No selectable option found; dismissing menu.");
+      console.log("[Argon-Bridge] No selectable option found; dismissing menu.");
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
       await sleep(200);
       throw new Error("Не удалось активировать модель Gemini 4 Argon.");
@@ -345,7 +345,7 @@
     // Insert text via native execCommand so framework event listeners receive it
     const success = document.execCommand("insertText", false, text);
     if (!success || (inputEl.innerText || inputEl.textContent).trim().length === 0) {
-      console.log("[Gemini-Bridge] execCommand fallback to innerText...");
+      console.log("[Argon-Bridge] execCommand fallback to innerText...");
       inputEl.innerText = text;
       inputEl.dispatchEvent(new InputEvent("input", { bubbles: true, cancelable: true, inputType: "insertText", data: text }));
       inputEl.dispatchEvent(new Event("change", { bubbles: true }));
@@ -455,10 +455,10 @@
   // 5. Complete prompt execution lifecycle
   async function handleExecutePrompt(req) {
     if (isExecuting) {
-      console.log("[Gemini-Bridge] Overriding previous request for new request:", req.id);
+      console.log("[Argon-Bridge] Overriding previous request for new request:", req.id);
     }
     isExecuting = true;
-    console.log(`[Gemini-Bridge] Starting execution for request ${req.id}...`);
+    console.log(`[Argon-Bridge] Starting execution for request ${req.id}...`);
 
     try {
       // Step A: Locate input field first so we know the prompt area is fully loaded
@@ -483,15 +483,15 @@
       // Step E: Locate and click Send button
       const sendBtn = await waitForCondition(() => findSendButton(), 5000, 200);
       if (!sendBtn) {
-        console.log("[Gemini-Bridge] Send button not found; sending Enter key...");
+        console.log("[Argon-Bridge] Send button not found; sending Enter key...");
         inputEl.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
       } else {
-        console.log("[Gemini-Bridge] Clicking Send button...");
+        console.log("[Argon-Bridge] Clicking Send button...");
         sendBtn.click();
       }
 
       // Step F: Wait for response generation to complete
-      console.log("[Gemini-Bridge] Waiting for Gemini response generation...");
+      console.log("[Argon-Bridge] Waiting for Gemini response generation...");
       const maxWaitMs = (req.timeout_secs || 240) * 1000;
       const startTime = Date.now();
       let lastText = "";
@@ -521,7 +521,7 @@
             if (curText === lastText) {
               stableCount++;
               if (stableCount >= 2) { // 1.4s of stability
-                console.log("[Gemini-Bridge] Response complete! Length:", curText.length);
+                console.log("[Argon-Bridge] Response complete! Length:", curText.length);
                 break;
               }
             } else {
@@ -548,7 +548,7 @@
       const copyBtn = findResponseCopyButton(finalResponseEl);
       if (copyBtn) {
         try {
-          console.log("[Gemini-Bridge] Triggering native Copy button...");
+          console.log("[Argon-Bridge] Triggering native Copy button...");
           copyBtn.click();
           const waitStart = Date.now();
           while (Date.now() - waitStart < 500 && !capturedMarkdownFromPage) {
@@ -556,7 +556,7 @@
           }
           if (capturedMarkdownFromPage && capturedMarkdownFromPage.trim().length > 0) {
             markdown = capturedMarkdownFromPage.trim();
-            console.log("[Gemini-Bridge] Captured Markdown via MainWorld interceptor! Bytes:", markdown.length);
+            console.log("[Argon-Bridge] Captured Markdown via MainWorld interceptor! Bytes:", markdown.length);
           }
         } catch (_) {}
       }
@@ -571,11 +571,11 @@
 
       // Prepend model rate-limit warning if fallback occurred
       if (activeModelNotice && markdown && markdown.length > 0) {
-        markdown = `> ⚠️ **Gemini-Bridge:** ${activeModelNotice}\n\n` + markdown;
+        markdown = `> ⚠️ **Argon-Bridge:** ${activeModelNotice}\n\n` + markdown;
       }
 
       const finalUrl = window.location.href;
-      console.log("[Gemini-Bridge] Execution successful. URL:", finalUrl);
+      console.log("[Argon-Bridge] Execution successful. URL:", finalUrl);
 
       port.postMessage({
         action: "PROMPT_FINISHED",
@@ -587,7 +587,7 @@
       });
 
     } catch (err) {
-      console.log("[Gemini-Bridge] Prompt rejected / execution stopped:", err.message || err);
+      console.log("[Argon-Bridge] Prompt rejected / execution stopped:", err.message || err);
       port.postMessage({
         action: "PROMPT_FINISHED",
         id: req.id,

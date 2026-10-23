@@ -1,13 +1,13 @@
-# AGENTS.md — Gemini-Bridge Operational Manual
+# AGENTS.md — Argon-Bridge Operational Manual
 
 ## 1. Mission & Objectives
-**Gemini-Bridge** is an ultra-fast, zero-overhead bridge between **Antigravity AI Agent** and **Google Gemini Web (`gemini.google.com`)**, specifically designed to leverage the cutting-edge **Gemini 4 Argon** reasoning & coding model directly within agentic workflows.
+**Argon-Bridge** is an ultra-fast, zero-overhead bridge between **Antigravity AI Agent** and **Google Gemini Web (`gemini.google.com`)**, specifically designed to leverage the cutting-edge **Gemini 4 Argon** reasoning & coding model directly within agentic workflows.
 
 ### Key Performance Indicators (KPIs)
 - **Zero Runtime Overhead:** Written in pure Rust; < 5MB RAM consumption, < 3ms cold start for CLI commands.
 - **100% Anti-Bot Resilience:** Transports prompts through an authenticated Chrome Extension running inside the user's real browser session.
 - **1:1 Strict Conversation Mapping:** Each unique Antigravity `conversation_id` is deterministically mapped to a dedicated Gemini web chat session.
-- **Dual Native Interface:** Exposes both Model Context Protocol (MCP stdio JSON-RPC 2.0) for seamless agent tool calling and a high-speed CLI (`gemini-bridge ask`) for terminal workflows.
+- **Dual Native Interface:** Exposes both Model Context Protocol (MCP stdio JSON-RPC 2.0) for seamless agent tool calling and a high-speed CLI (`argon-bridge ask`) for terminal workflows.
 
 ### Scope & Invariants
 - **In-Scope:**

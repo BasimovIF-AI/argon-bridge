@@ -1,4 +1,4 @@
-// background.js - Gemini-Bridge Service Worker (Manifest V3)
+// background.js - Argon-Bridge Service Worker (Manifest V3)
 
 const WS_URL = "ws://127.0.0.1:8765";
 let socket = null;
@@ -10,13 +10,13 @@ const MAX_RECONNECT_DELAY = 30000;
 const geminiPorts = new Map(); // tabId -> chrome.runtime.Port
 let dedicatedBridgeTabId = null;
 
-console.log("[Gemini-Bridge] Service Worker initialized.");
+console.log("[Argon-Bridge] Service Worker initialized.");
 
 // 1. Maintain long-lived port connection with content.js per tabId
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "gemini_tab" && port.sender && port.sender.tab) {
     const tabId = port.sender.tab.id;
-    console.log(`[Gemini-Bridge] Gemini tab ${tabId} connected via port.`);
+    console.log(`[Argon-Bridge] Gemini tab ${tabId} connected via port.`);
     geminiPorts.set(tabId, port);
 
     // If no dedicated tab assigned, or if this is the dedicated tab, record it
@@ -33,7 +33,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
     port.onDisconnect.addListener(() => {
       const _ = chrome.runtime?.lastError; // Cleanly consume error to prevent unchecked runtime warnings
-      console.log(`[Gemini-Bridge] Gemini tab ${tabId} disconnected.`);
+      console.log(`[Argon-Bridge] Gemini tab ${tabId} disconnected.`);
       geminiPorts.delete(tabId);
       if (dedicatedBridgeTabId === tabId) {
         dedicatedBridgeTabId = null;
@@ -48,7 +48,7 @@ chrome.runtime.onConnect.addListener((port) => {
 // Cleanly handle tab closure
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (dedicatedBridgeTabId === tabId) {
-    console.log(`[Gemini-Bridge] Dedicated tab ${tabId} was closed by user.`);
+    console.log(`[Argon-Bridge] Dedicated tab ${tabId} was closed by user.`);
     dedicatedBridgeTabId = null;
   }
   geminiPorts.delete(tabId);
@@ -70,7 +70,7 @@ function connectWebSocket() {
   }
 
   socket.onopen = () => {
-    console.log("[Gemini-Bridge] Connected to Rust bridge at " + WS_URL);
+    console.log("[Argon-Bridge] Connected to Rust bridge at " + WS_URL);
     reconnectDelay = 5000;
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#22c55e" });
@@ -82,7 +82,7 @@ function connectWebSocket() {
       const msg = JSON.parse(event.data);
       handleBridgeMessage(msg);
     } catch (err) {
-      console.log("[Gemini-Bridge] Failed to parse message from bridge:", err);
+      console.log("[Argon-Bridge] Failed to parse message from bridge:", err);
     }
   };
 
@@ -168,7 +168,7 @@ async function getGeminiTabForExecution() {
   }
 
   // 3. No Gemini tab exists in the browser! Open one on-demand.
-  console.log("[Gemini-Bridge] No open Gemini tab found. Automatically opening new tab on-demand...");
+  console.log("[Argon-Bridge] No open Gemini tab found. Automatically opening new tab on-demand...");
   try {
     const tab = await chrome.tabs.create({
       url: "https://gemini.google.com/app",
@@ -177,7 +177,7 @@ async function getGeminiTabForExecution() {
     dedicatedBridgeTabId = tab.id;
     return tab;
   } catch (err) {
-    console.log("[Gemini-Bridge] Failed to create tab:", err);
+    console.log("[Argon-Bridge] Failed to create tab:", err);
     return null;
   }
 }
@@ -205,7 +205,7 @@ async function executePromptOnGemini(req) {
   // Handle URL navigation if required
   const currentUrl = tab.url || "";
   if (req.chat_url && currentUrl !== req.chat_url) {
-    console.log(`[Gemini-Bridge] Navigating tab ${tab.id} to: ${req.chat_url}`);
+    console.log(`[Argon-Bridge] Navigating tab ${tab.id} to: ${req.chat_url}`);
     geminiPorts.delete(tab.id); // Invalidate old page port so we wait for new page content script
     try {
       await chrome.tabs.update(tab.id, { url: req.chat_url });
@@ -213,7 +213,7 @@ async function executePromptOnGemini(req) {
     } catch (_) {}
   } else if (!req.chat_url && currentUrl.includes("/app/") && !currentUrl.endsWith("/app")) {
     // If user requested a fresh chat and the tab is inside an old conversation, navigate to clean /app
-    console.log(`[Gemini-Bridge] Resetting tab to clean /app for new chat...`);
+    console.log(`[Argon-Bridge] Resetting tab to clean /app for new chat...`);
     geminiPorts.delete(tab.id); // Invalidate old page port
     try {
       await chrome.tabs.update(tab.id, { url: "https://gemini.google.com/app" });
@@ -224,7 +224,7 @@ async function executePromptOnGemini(req) {
   // Ensure port is connected
   let port = geminiPorts.get(tab.id);
   if (!port) {
-    console.log(`[Gemini-Bridge] Waiting for port on tab ${tab.id}...`);
+    console.log(`[Argon-Bridge] Waiting for port on tab ${tab.id}...`);
     port = await waitForTabPort(tab.id, 8000);
   }
 
@@ -249,7 +249,7 @@ async function executePromptOnGemini(req) {
     return;
   }
 
-  console.log(`[Gemini-Bridge] Dispatching prompt to tab ${dedicatedBridgeTabId}...`);
+  console.log(`[Argon-Bridge] Dispatching prompt to tab ${dedicatedBridgeTabId}...`);
   port.postMessage({
     action: "EXECUTE_PROMPT",
     id: req.id,

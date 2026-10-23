@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.7] - 2026-10-23
 
+### Changed
+- Project renamed to **Argon-Bridge** (`argon-bridge`) to highlight dedicated focus on the Gemini 4 Argon reasoning model.
+- Binary, CLI, MCP Server, and scripts updated to `argon-bridge`.
+
 ### Fixed
 - Replaced `console.error` and `console.warn` with `console.log` so expected operational refusals (such as model rate limits) do not trigger Chrome's extension error view.
+- Fully sanitized and removed local development paths from repository and commit history.
 
 ## [0.2.6] - 2026-10-23
 

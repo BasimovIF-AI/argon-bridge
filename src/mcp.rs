@@ -73,8 +73,8 @@ impl McpServer {
                         "tools": {}
                     },
                     "serverInfo": {
-                        "name": "gemini-bridge",
-                        "version": "0.1.0"
+                        "name": "argon-bridge",
+                        "version": "0.2.7"
                     }
                 });
                 Some(JsonRpcResponse::success(req_id, result))
@@ -212,7 +212,7 @@ impl McpServer {
                                     "content": [
                                         {
                                             "type": "text",
-                                            "text": format!("Error from Gemini-Bridge: {}", e)
+                                            "text": format!("Error from Argon-Bridge: {}", e)
                                         }
                                     ],
                                     "isError": true

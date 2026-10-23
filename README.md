@@ -1,16 +1,17 @@
-# Gemini-Bridge 🚀
+# Argon-Bridge 🚀
 
-Высокоскоростной мост между **Google Gemini Web (`gemini.google.com`)** и **ИИ-агентом Antigravity** на **Rust**, позволяющий использовать новейшую модель **Gemini 4 Argon** для генерации кода, код-ревью и проектирования архитектуры.
+Высокоскоростной мост между **Google Gemini Web (`gemini.google.com`)** и **ИИ-агентом Antigravity** на **Rust**, созданный специально для прямой работы с передовой рассуждающей моделью **Gemini 4 Argon** в роли Главного Архитектора.
 
 ---
 
 ## ⚡ Особенности
 - **Сверхбыстрый и компактный Rust-бэкенд:** < 5 МБ RAM, мгновенный холодный старт (< 3 мс), отсутствие сборщика мусора и интерпретаторов.
 - **100% защита от капч и банов:** Запросы выполняются внутри вашего обычного браузера Google Chrome через лёгкое расширение Manifest V3 с вашей авторизованной сессией Google.
+- **Строгий фокус на Argon:** Мост автоматически переключается на модель **4 Argon** через интерфейс `<gem-menu-item>` и мгновенно информирует о статусе лимитов без случайных отправок в более слабые модели.
 - **Привязка сессий 1:1:** Каждый диалог в Antigravity (`conversation_id`) автоматически привязывается к своему выделенному чату на сайте Gemini. Модель помнит контекст всей задачи!
 - **Двойной интерфейс:**
   - **MCP Tool:** Нативный инструмент `ask_gemini_argon` для агента в Antigravity.
-  - **CLI утилита:** Команда `gemini-bridge ask --prompt "..."` для вызова из консоли или скриптов.
+  - **CLI утилита:** Команда `argon-bridge ask --prompt "..."` для вызова из консоли или скриптов.
 
 ---
 
@@ -21,7 +22,7 @@
 ```powershell
 .\build.ps1 -Release
 ```
-Скомпилированный бинарник появится в `bin/gemini-bridge_v0.1.0_windows_amd64.exe` (и `bin/gemini-bridge.exe`).
+Скомпилированный бинарник появится в `bin/argon-bridge_v0.2.7_windows_amd64.exe` (и `bin/argon-bridge.exe`).
 
 ### Шаг 2: Установка Chrome Extension
 1. Откройте в Chrome страницу `chrome://extensions/`.
@@ -33,11 +34,11 @@
 ### Шаг 3: Запуск и проверка
 Запустите сервер моста:
 ```powershell
-.\bin\gemini-bridge.exe serve
+.\bin\argon-bridge.exe serve
 ```
 Либо отправьте тестовый запрос через CLI:
 ```powershell
-.\bin\gemini-bridge.exe ask --prompt "Привет! Напиши простую функцию на Rust."
+.\bin\argon-bridge.exe ask --prompt "Привет! Напиши простую функцию на Rust."
 ```
 
 ---
@@ -49,8 +50,8 @@
 ```json
 {
   "mcpServers": {
-    "gemini-bridge": {
-      "command": "C:\\path\\to\\Gemini-Bridge\\bin\\gemini-bridge.exe",
+    "argon-bridge": {
+      "command": "C:\\path\\to\\argon-bridge\\bin\\argon-bridge.exe",
       "args": ["mcp"]
     }
   }

@@ -1,4 +1,4 @@
-# Gemini-Bridge Architecture & Protocol Specification
+# Argon-Bridge Architecture & Protocol Specification
 
 ## System Overview
 
@@ -12,7 +12,7 @@ flowchart TD
         Agent --> CLIProcess
     end
 
-    subgraph RustDaemon["gemini-bridge.exe (Rust 1.98+, Tokio)"]
+    subgraph RustDaemon["argon-bridge.exe (Rust 1.98+, Tokio)"]
         StdioMCP["MCP Handler (stdio JSON-RPC 2.0)"]
         CLIDispatcher["CLI Subcommands (ask, serve, status)"]
         SessionMgr["Session Store (sessions.json)"]
